@@ -20,6 +20,24 @@
         flex-wrap: wrap;
         align-items: center;
       }
+      .view-tabs {
+        display: inline-flex;
+        margin-bottom: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .view-tab {
+        border: none;
+        background: #f5f5f5;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .view-tab.active {
+        background: #2d6cdf;
+        color: #fff;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -32,6 +50,10 @@
       }
       th {
         background: #f6f6f6;
+      }
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
       }
       #message {
         margin-top: 0.75rem;
@@ -72,14 +94,19 @@
       <button id="load">Carregar</button>
     </div>
 
+    <div class="view-tabs">
+      <button id="tabDraft" class="view-tab active" data-view="draft">Draft Priority</button>
+      <button id="tabPower" class="view-tab" data-view="power">Power (PBI-like)</button>
+    </div>
+
     <table>
       <thead>
         <tr>
-          <th>Champion</th>
-          <th>Win</th>
-          <th>Pick</th>
-          <th>Ban</th>
-          <th>Priority</th>
+          <th class="sortable" data-sort="champion">Champion</th>
+          <th class="sortable" data-sort="win">Win</th>
+          <th class="sortable" data-sort="pick">Pick</th>
+          <th class="sortable" data-sort="ban">Ban</th>
+          <th id="scoreHeader" class="sortable" data-sort="draft_score">Draft Priority</th>
         </tr>
       </thead>
       <tbody id="rows"></tbody>
@@ -95,13 +122,54 @@
       const rowsBody = document.getElementById("rows");
       const message = document.getElementById("message");
       const sourceLabel = document.getElementById("sourceLabel");
+      const tabDraft = document.getElementById("tabDraft");
+      const tabPower = document.getElementById("tabPower");
+      const scoreHeader = document.getElementById("scoreHeader");
+      const sortableHeaders = document.querySelectorAll("th.sortable");
+
+      const state = {
+        view: "draft",
+        sort: "draft_score",
+        dir: "desc",
+      };
 
       function pct(value) {
         return `${(value * 100).toFixed(1)}%`;
       }
 
+      function currentScoreField() {
+        return state.view === "power" ? "power_score" : "draft_score";
+      }
+
+      function updateTabs() {
+        tabDraft.classList.toggle("active", state.view === "draft");
+        tabPower.classList.toggle("active", state.view === "power");
+      }
+
+      function labelForSort(sortKey) {
+        if (sortKey === "champion") return "Champion";
+        if (sortKey === "win") return "Win";
+        if (sortKey === "pick") return "Pick";
+        if (sortKey === "ban") return "Ban";
+        return state.view === "power" ? "Power" : "Draft Priority";
+      }
+
+      function updateHeaders() {
+        const scoreField = currentScoreField();
+        scoreHeader.dataset.sort = scoreField;
+        scoreHeader.textContent = state.view === "power" ? "Power (PBI-like)" : "Draft Priority";
+
+        sortableHeaders.forEach((header) => {
+          const key = header.dataset.sort;
+          const isActive = key === state.sort;
+          const arrow = isActive ? (state.dir === "asc" ? " ↑" : " ↓") : "";
+          header.textContent = `${labelForSort(key)}${arrow}`;
+        });
+      }
+
       function render(items) {
         rowsBody.innerHTML = "";
+        const scoreField = currentScoreField();
 
         items.forEach((item) => {
           const tr = document.createElement("tr");
@@ -110,7 +178,7 @@
             <td>${pct(item.winrate)}</td>
             <td>${pct(item.pickrate)}</td>
             <td>${pct(item.banrate)}</td>
-            <td>${item.priority_score.toFixed(3)}</td>
+            <td>${(item[scoreField] ?? item.priority_score).toFixed(3)}</td>
           `;
           rowsBody.appendChild(tr);
         });
@@ -131,17 +199,31 @@
         const role = roleSelect.value;
         const tier = tierSelect.value;
         const source = useCnCheckbox.checked ? "auto" : "sample";
+        const scoreSort = currentScoreField();
+
+        if (!["champion", "win", "pick", "ban", "draft_score", "power_score"].includes(state.sort)) {
+          state.sort = scoreSort;
+        }
+
         message.textContent = "Carregando...";
 
         try {
-          const response = await fetch(`/meta?role=${role}&tier=${tier}&source=${source}`);
+          const query = new URLSearchParams({
+            role,
+            tier,
+            source,
+            view: state.view,
+            sort: state.sort,
+            dir: state.dir,
+          });
+          const response = await fetch(`/meta?${query.toString()}`);
           if (!response.ok) {
             throw new Error("Falha ao carregar dados");
           }
           const data = await response.json();
           render(data.items);
           sourceLabel.textContent = `Fonte: ${data.source}`;
-          message.textContent = `Mostrando ${data.items.length} campeões`;
+          message.textContent = `Mostrando ${data.items.length} campeões · ordenado por ${labelForSort(state.sort)} (${state.dir})`;
         } catch (err) {
           rowsBody.innerHTML = "";
           message.textContent = err.message;
@@ -149,7 +231,36 @@
         }
       }
 
+      function setView(view) {
+        state.view = view;
+        const scoreField = currentScoreField();
+        if (state.sort === "draft_score" || state.sort === "power_score") {
+          state.sort = scoreField;
+        }
+        updateTabs();
+        updateHeaders();
+        loadMeta();
+      }
+
+      function onSortClick(header) {
+        const key = header.dataset.sort;
+        if (state.sort === key) {
+          state.dir = state.dir === "asc" ? "desc" : "asc";
+        } else {
+          state.sort = key;
+          state.dir = key === "champion" ? "asc" : "desc";
+        }
+        updateHeaders();
+        loadMeta();
+      }
+
+      tabDraft.addEventListener("click", () => setView("draft"));
+      tabPower.addEventListener("click", () => setView("power"));
       loadButton.addEventListener("click", loadMeta);
+      sortableHeaders.forEach((header) => header.addEventListener("click", () => onSortClick(header)));
+
+      updateTabs();
+      updateHeaders();
       loadMeta();
     </script>
   </body>

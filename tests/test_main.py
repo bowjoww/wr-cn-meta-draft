@@ -383,3 +383,67 @@ def test_meta_debug_cn_positions(monkeypatch):
     assert payload["tier"] == "challenger"
     assert payload["positions"]["1"]["count"] == 1
     assert payload["positions"]["1"]["top_bans"][0]["hero_id"] == "103"
+
+
+def test_meta_returns_power_and_draft_scores():
+    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "sample"})
+
+    assert response.status_code == 200
+    first = response.json()["items"][0]
+    assert "priority_score" in first
+    assert "power_score" in first
+    assert "draft_score" in first
+
+
+def test_meta_sorting_by_draft_and_power_score(monkeypatch):
+    rows = [
+        {"champion": "C", "role": "top", "tier": "diamond", "winrate": 0.53, "pickrate": 0.12, "banrate": 0.08},
+        {"champion": "A", "role": "top", "tier": "diamond", "winrate": 0.50, "pickrate": 0.18, "banrate": 0.25},
+        {"champion": "B", "role": "top", "tier": "diamond", "winrate": 0.57, "pickrate": 0.09, "banrate": 0.03},
+    ]
+    monkeypatch.setattr("app.main._load_meta_data", lambda: rows)
+
+    draft_desc = client.get(
+        "/meta",
+        params={"role": "top", "tier": "diamond", "source": "sample", "sort": "draft_score", "dir": "desc"},
+    )
+    draft_asc = client.get(
+        "/meta",
+        params={"role": "top", "tier": "diamond", "source": "sample", "sort": "draft_score", "dir": "asc"},
+    )
+    power_desc = client.get(
+        "/meta",
+        params={"role": "top", "tier": "diamond", "source": "sample", "sort": "power_score", "dir": "desc"},
+    )
+
+    assert draft_desc.status_code == 200
+    assert draft_asc.status_code == 200
+    assert power_desc.status_code == 200
+
+    draft_desc_champs = [item["champion"] for item in draft_desc.json()["items"]]
+    draft_asc_champs = [item["champion"] for item in draft_asc.json()["items"]]
+    power_desc_champs = [item["champion"] for item in power_desc.json()["items"]]
+
+    assert draft_desc_champs == list(reversed(draft_asc_champs))
+    assert power_desc_champs != draft_desc_champs
+
+
+def test_meta_view_changes_default_sort(monkeypatch):
+    rows = [
+        {"champion": "C", "role": "top", "tier": "diamond", "winrate": 0.53, "pickrate": 0.12, "banrate": 0.08},
+        {"champion": "A", "role": "top", "tier": "diamond", "winrate": 0.50, "pickrate": 0.18, "banrate": 0.25},
+        {"champion": "B", "role": "top", "tier": "diamond", "winrate": 0.57, "pickrate": 0.09, "banrate": 0.03},
+    ]
+    monkeypatch.setattr("app.main._load_meta_data", lambda: rows)
+
+    draft_view = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "sample", "view": "draft"})
+    power_view = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "sample", "view": "power"})
+
+    assert draft_view.status_code == 200
+    assert power_view.status_code == 200
+
+    draft_items = draft_view.json()["items"]
+    power_items = power_view.json()["items"]
+
+    assert draft_items[0]["draft_score"] == max(item["draft_score"] for item in draft_items)
+    assert power_items[0]["power_score"] == max(item["power_score"] for item in power_items)
