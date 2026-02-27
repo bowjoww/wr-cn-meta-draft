@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WR CN Meta Viewer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 2rem;
+      }
+      .controls {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 0.5rem;
+        text-align: left;
+      }
+      th {
+        background: #f6f6f6;
+      }
+      #message {
+        margin-top: 0.75rem;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WR CN Meta Viewer</h1>
+
+    <div class="controls">
+      <label>
+        Role
+        <select id="role">
+          <option value="top">top</option>
+          <option value="jungle">jungle</option>
+          <option value="mid">mid</option>
+          <option value="adc">adc</option>
+          <option value="support">support</option>
+        </select>
+      </label>
+
+      <label>
+        Tier
+        <select id="tier">
+          <option value="diamond">diamond</option>
+          <option value="master">master</option>
+          <option value="challenger">challenger</option>
+        </select>
+      </label>
+
+      <button id="load">Carregar</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Champion</th>
+          <th>Win</th>
+          <th>Pick</th>
+          <th>Ban</th>
+          <th>Priority</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div id="message"></div>
+
+    <script>
+      const loadButton = document.getElementById("load");
+      const roleSelect = document.getElementById("role");
+      const tierSelect = document.getElementById("tier");
+      const rowsBody = document.getElementById("rows");
+      const message = document.getElementById("message");
+
+      function pct(value) {
+        return `${(value * 100).toFixed(1)}%`;
+      }
+
+      function render(items) {
+        rowsBody.innerHTML = "";
+
+        items.forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${item.champion}</td>
+            <td>${pct(item.winrate)}</td>
+            <td>${pct(item.pickrate)}</td>
+            <td>${pct(item.banrate)}</td>
+            <td>${item.priority_score.toFixed(3)}</td>
+          `;
+          rowsBody.appendChild(tr);
+        });
+      }
+
+      async function loadMeta() {
+        const role = roleSelect.value;
+        const tier = tierSelect.value;
+        message.textContent = "Carregando...";
+
+        try {
+          const response = await fetch(`/meta?role=${role}&tier=${tier}`);
+          if (!response.ok) {
+            throw new Error("Falha ao carregar dados");
+          }
+          const data = await response.json();
+          render(data.items);
+          message.textContent = `Mostrando ${data.items.length} campeões`;
+        } catch (err) {
+          rowsBody.innerHTML = "";
+          message.textContent = err.message;
+        }
+      }
+
+      loadButton.addEventListener("click", loadMeta);
+      loadMeta();
+    </script>
+  </body>
+</html>
