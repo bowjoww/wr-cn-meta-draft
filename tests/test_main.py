@@ -73,3 +73,15 @@ def test_meta_source_returns_cn_cache_when_fresh(tmp_path, monkeypatch):
     body = response.json()
     assert body["source"] == "cn_cache"
     assert body["cache_age_seconds"] >= 0
+
+
+def test_meta_source_reports_hero_map_status(monkeypatch):
+    monkeypatch.setattr("app.main.read_cache", lambda: None)
+    monkeypatch.setattr("app.main.hero_map_cache_age_seconds", lambda: 42)
+
+    response = client.get("/meta/source")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["hero_map_available"] is True
+    assert body["hero_map_age_seconds"] == 42

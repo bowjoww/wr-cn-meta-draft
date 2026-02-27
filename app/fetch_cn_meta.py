@@ -12,12 +12,16 @@ from urllib.parse import urljoin
 import requests
 
 CN_PAGE_URL = "https://lolm.qq.com/act/a20220818raider/index.html"
+HERO_MAP_URL = "https://game.gtimg.cn/images/lgamem/act/lrlib/js/heroList/hero_list.js"
+HERO_STATS_URL = "https://mlol.qt.qq.com/go/lgame_battle_info/hero_rank_list_v2"
 CACHE_TTL_SECONDS = 6 * 60 * 60
+HERO_MAP_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 RATE_LIMIT_SECONDS = 10
 MAX_RETRIES = 3
 BACKOFF_SECONDS = [2, 4, 8]
 
 CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_meta_cache.json"
+HERO_MAP_CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_hero_map.json"
 
 ROLE_TO_CN_POSITION = {
     "top": "2",
@@ -93,16 +97,81 @@ def discover_endpoints() -> dict[str, Any]:
         for found in re.findall(r'getJSON\(["\']([^"\']+)["\']', script_text):
             api_urls.add(urljoin(CN_PAGE_URL, found))
 
+    api_urls.add(HERO_STATS_URL)
     return {
         "page_url": CN_PAGE_URL,
+        "hero_map_url": HERO_MAP_URL,
         "script_urls": script_urls,
         "api_urls": sorted(api_urls),
     }
 
 
-def _normalize_cn_row(row: dict[str, Any], role: str, tier: str) -> dict[str, Any]:
+def _extract_hero_map(js_text: str) -> dict[str, str]:
+    hero_map: dict[str, str] = {}
+    for object_match in re.finditer(r"\{[^{}]*\}", js_text):
+        item_text = object_match.group(0)
+        id_match = re.search(r'(?:hero_id|heroId|heroID|id)\s*:\s*["\']?(\d+)["\']?', item_text)
+        name_match = re.search(
+            r'(?:hero_name|heroName|name|title|cname)\s*:\s*["\']([^"\']+)["\']',
+            item_text,
+        )
+        if not id_match or not name_match:
+            continue
+
+        hero_map[id_match.group(1)] = name_match.group(1).strip()
+
+    if not hero_map:
+        raise RuntimeError("Could not parse hero map from hero_list.js")
+    return hero_map
+
+
+def _read_json_cache(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _cache_age_from_fetched_at(fetched_at: str | None) -> int:
+    if not fetched_at:
+        return 10**9
+    parsed = datetime.fromisoformat(fetched_at)
+    return int((datetime.now(timezone.utc) - parsed).total_seconds())
+
+
+def fetch_hero_map_from_gtimg() -> dict[str, str]:
+    cache_payload = _read_json_cache(HERO_MAP_CACHE_PATH)
+    if cache_payload and _cache_age_from_fetched_at(cache_payload.get("fetched_at")) <= HERO_MAP_CACHE_TTL_SECONDS:
+        return (cache_payload.get("items") or {})
+
+    js_text = _request_with_rate_limit(HERO_MAP_URL).text
+    hero_map = _extract_hero_map(js_text)
+    payload = {
+        "fetched_at": _iso_now(),
+        "source_url": HERO_MAP_URL,
+        "items": hero_map,
+    }
+    HERO_MAP_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with HERO_MAP_CACHE_PATH.open("w", encoding="utf-8") as file:
+        json.dump(payload, file, ensure_ascii=False, indent=2)
+    return hero_map
+
+
+def hero_map_cache_age_seconds() -> int | None:
+    cache_payload = _read_json_cache(HERO_MAP_CACHE_PATH)
+    if not cache_payload:
+        return None
+    return _cache_age_from_fetched_at(cache_payload.get("fetched_at"))
+
+
+def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[str, str]) -> dict[str, Any]:
     hero_id = str(row.get("hero_id", "")).strip()
-    champion = row.get("hero_name") or row.get("hero_title") or f"hero_{hero_id}"
+    champion = (
+        hero_map.get(hero_id)
+        or row.get("hero_name")
+        or row.get("hero_title")
+        or f"hero_{hero_id}"
+    )
 
     return {
         "champion": champion,
@@ -120,10 +189,8 @@ def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
     if tier not in TIER_TO_CN_TIER:
         raise ValueError(f"Unsupported tier: {tier}")
 
-    endpoints = discover_endpoints()
-    list_url = next((u for u in endpoints.get("api_urls", []) if "hero_rank_list_v2" in u), None)
-    if not list_url:
-        list_url = "https://mlol.qt.qq.com/go/lgame_battle_info/hero_rank_list_v2"
+    hero_map = fetch_hero_map_from_gtimg()
+    list_url = HERO_STATS_URL
 
     payload = _request_with_rate_limit(list_url).json()
     if payload.get("result") != 0:
@@ -133,7 +200,7 @@ def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
     tier_bucket = data.get(TIER_TO_CN_TIER[tier]) or {}
     rows = tier_bucket.get(ROLE_TO_CN_POSITION[role]) or []
 
-    normalized = [_normalize_cn_row(row, role=role, tier=tier) for row in rows]
+    normalized = [_normalize_cn_row(row, role=role, tier=tier, hero_map=hero_map) for row in rows]
     normalized = [row for row in normalized if row["champion"]]
     if not normalized:
         raise RuntimeError("CN API returned empty payload for requested role/tier")
@@ -142,20 +209,11 @@ def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
 
 
 def read_cache() -> dict[str, Any] | None:
-    if not CACHE_PATH.exists():
-        return None
-
-    with CACHE_PATH.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    return _read_json_cache(CACHE_PATH)
 
 
 def cache_age_seconds(cache_payload: dict[str, Any]) -> int:
-    fetched_at = cache_payload.get("fetched_at")
-    if not fetched_at:
-        return 10**9
-
-    parsed = datetime.fromisoformat(fetched_at)
-    return int((datetime.now(timezone.utc) - parsed).total_seconds())
+    return _cache_age_from_fetched_at(cache_payload.get("fetched_at"))
 
 
 def is_cache_fresh(cache_payload: dict[str, Any]) -> bool:
