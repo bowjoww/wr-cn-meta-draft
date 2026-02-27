@@ -13,6 +13,7 @@ from app.fetch_cn_meta import (
     cache_age_seconds,
     fetch_cn_meta,
     get_cached_meta,
+    hero_map_cache_age_seconds,
     is_cache_fresh,
     read_cache,
     update_cache,
@@ -96,7 +97,8 @@ def meta(role: Role, tier: Tier, source: Source = "auto") -> dict[str, list[dict
 
 
 @app.get("/meta/source")
-def meta_source() -> dict[str, str | int | None]:
+def meta_source() -> dict[str, str | int | bool | None]:
+    hero_map_age = hero_map_cache_age_seconds()
     cache_payload = read_cache()
     if not cache_payload:
         return {
@@ -105,6 +107,8 @@ def meta_source() -> dict[str, str | int | None]:
             "cache_ttl_seconds": CACHE_TTL_SECONDS,
             "last_fetch": None,
             "source_url": None,
+            "hero_map_available": hero_map_age is not None,
+            "hero_map_age_seconds": hero_map_age,
         }
 
     age = cache_age_seconds(cache_payload)
@@ -115,4 +119,6 @@ def meta_source() -> dict[str, str | int | None]:
         "cache_ttl_seconds": CACHE_TTL_SECONDS,
         "last_fetch": cache_payload.get("fetched_at"),
         "source_url": cache_payload.get("source_url"),
+        "hero_map_available": hero_map_age is not None,
+        "hero_map_age_seconds": hero_map_age,
     }
