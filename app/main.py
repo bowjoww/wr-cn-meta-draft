@@ -10,12 +10,17 @@ from fastapi.responses import FileResponse
 from app.fetch_cn_meta import (
     CACHE_TTL_SECONDS,
     CN_PAGE_URL,
+    build_cn_rows_from_payload,
     cache_age_seconds,
     fetch_cn_meta,
+    fetch_cn_payload,
+    fetch_hero_map_from_gtimg,
+    get_cached_raw_payload,
     get_cached_meta,
     hero_map_cache_age_seconds,
     is_cache_fresh,
     read_cache,
+    summarize_cn_positions,
     update_cache,
 )
 from app.scoring import priority_score
@@ -72,8 +77,10 @@ def _load_cn_with_cache(role: Role, tier: Tier) -> tuple[list[dict] | None, str 
     if cached_rows:
         return cached_rows, "cn_cache"
 
-    rows = fetch_cn_meta(role=role, tier=tier)
-    update_cache(role=role, tier=tier, rows=rows, source_url=CN_PAGE_URL)
+    payload = fetch_cn_payload(tier=tier)
+    hero_map = fetch_hero_map_from_gtimg()
+    rows = build_cn_rows_from_payload(payload=payload, role=role, tier=tier, hero_map=hero_map)
+    update_cache(role=role, tier=tier, rows=rows, source_url=CN_PAGE_URL, raw_payload=payload)
     return rows, "cn_cache"
 
 
@@ -141,3 +148,16 @@ def meta_source() -> dict[str, str | int | bool | None]:
         "hero_map_available": hero_map_age is not None,
         "hero_map_age_seconds": hero_map_age,
     }
+
+
+@app.get("/meta/debug/cn_positions")
+def meta_debug_cn_positions(tier: Tier) -> dict[str, dict | str]:
+    try:
+        payload = get_cached_raw_payload(tier=tier)
+        if payload is None:
+            payload = fetch_cn_payload(tier=tier)
+        hero_map = fetch_hero_map_from_gtimg()
+        summary = summarize_cn_positions(payload=payload, tier=tier, hero_map=hero_map)
+        return {"tier": tier, **summary}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"CN source unavailable: {exc}") from exc

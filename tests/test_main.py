@@ -35,10 +35,7 @@ def _cn_payload_positions() -> dict:
 
 
 def test_meta_auto_fallbacks_to_sample_when_cn_fails(monkeypatch):
-    def fake_fail_fetch(role: str, tier: str):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr("app.main.fetch_cn_meta", fake_fail_fetch)
+    monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: (_ for _ in ()).throw(RuntimeError("boom")))
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
 
     response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "auto"})
@@ -167,8 +164,9 @@ def test_meta_source_reports_hero_map_status(monkeypatch):
 
 def test_meta_cn_role_to_position_mapping_for_all_roles(monkeypatch):
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
-    monkeypatch.setattr("app.main.update_cache", lambda role, tier, rows, source_url: None)
+    monkeypatch.setattr("app.main.update_cache", lambda role, tier, rows, source_url, raw_payload=None: None)
     monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
     monkeypatch.setattr(
         "app.fetch_cn_meta._request_with_rate_limit",
         lambda url: _DummyResponse(_cn_payload_positions()),
@@ -196,8 +194,9 @@ def test_meta_cn_role_to_position_mapping_for_all_roles(monkeypatch):
 
 def test_meta_cn_support_does_not_return_jungle(monkeypatch):
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
-    monkeypatch.setattr("app.main.update_cache", lambda role, tier, rows, source_url: None)
+    monkeypatch.setattr("app.main.update_cache", lambda role, tier, rows, source_url, raw_payload=None: None)
     monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
     monkeypatch.setattr(
         "app.fetch_cn_meta._request_with_rate_limit",
         lambda url: _DummyResponse(_cn_payload_positions()),
@@ -213,3 +212,17 @@ def test_meta_cn_support_does_not_return_jungle(monkeypatch):
     hero_ids = {item["hero_id"] for item in payload["items"]}
     assert "105" in hero_ids
     assert "102" not in hero_ids
+
+
+def test_meta_debug_cn_positions(monkeypatch):
+    monkeypatch.setattr("app.main.get_cached_raw_payload", lambda tier: _cn_payload_positions())
+    monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
+
+    response = client.get("/meta/debug/cn_positions", params={"tier": "challenger"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["counts"]["1"] == 1
+    assert payload["counts"]["5"] == 1
+    assert payload["top3_by_banrate"]["3"][0]["hero_id"] == "103"
+
