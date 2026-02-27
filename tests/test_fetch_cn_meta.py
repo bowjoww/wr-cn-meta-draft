@@ -32,7 +32,7 @@ def _stats_payload(hero_id: int) -> dict:
 
 
 def test_fetch_cn_meta_uses_gtimg_hero_map(monkeypatch):
-    monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {"10001": "Annie"})
+    monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {"10001": {"hero_name_cn": "安妮", "hero_name_global": "Annie"}})
     monkeypatch.setattr("app.fetch_cn_meta._request_with_rate_limit", lambda url: DummyResponse(_stats_payload(10001)))
 
     rows = fetch_cn_meta(role="top", tier="diamond")
@@ -57,4 +57,5 @@ def test_extract_hero_map_from_js_fixture():
 
     hero_map = _extract_hero_map(js_text)
 
-    assert hero_map["10001"] == "X"
+    assert hero_map["10001"]["hero_name_cn"] == "蛮王"
+    assert hero_map["10001"]["hero_name_global"] == "Tryndamere"

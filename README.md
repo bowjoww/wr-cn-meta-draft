@@ -20,7 +20,7 @@ Abra no navegador:
 ## Endpoints
 
 - `GET /health` → `{"status":"ok"}`
-- `GET /meta?role=<top|jungle|mid|adc|support>&tier=<diamond|master|challenger>&source=<auto|sample|cn>`
+- `GET /meta?role=<top|jungle|mid|adc|support>&tier=<diamond|master|challenger>&source=<auto|sample|cn>&name_lang=<global|cn>`
 - `GET /meta/source`
 
 ### Fontes de dados (`source`)
@@ -35,6 +35,7 @@ Exemplos:
 curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=auto"
 curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=sample"
 curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=cn"
+curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=cn&name_lang=cn"
 ```
 
 ### Coleta CN real + cache
@@ -62,6 +63,18 @@ Como os códigos do endpoint CN não são 1:1 com os filtros da API local, foi a
   - `challenger -> 3` (王者)
 
 Quando o endpoint não trouxer nome canônico do campeão, o app normaliza para `hero_<hero_id>`.
+
+
+### Nome dos campeões no `/meta`
+
+- O cache `data/cn_hero_map.json` agora salva, por campeão, os campos:
+  - `hero_name_cn`: valor original de `name` no `hero_list.js` (chinês).
+  - `hero_name_global`: derivado de `poster` (basename sem sufixo `_<digits>.<ext>`).
+- No endpoint `/meta`, `champion` usa **global** por padrão (`name_lang=global`).
+- `name_lang=cn` força exibição do nome chinês quando disponível.
+- Fallbacks de nome seguem esta ordem:
+  - `global`: `hero_name_global` -> `hero_name_cn` -> `hero_<id>`
+  - `cn`: `hero_name_cn` -> `hero_name_global` -> `hero_<id>`
 
 ### Cálculo do PriorityScore
 

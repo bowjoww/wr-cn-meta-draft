@@ -28,6 +28,7 @@ STATIC_INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
 Role = Literal["top", "jungle", "mid", "adc", "support"]
 Tier = Literal["diamond", "master", "challenger"]
 Source = Literal["auto", "sample", "cn"]
+NameLang = Literal["global", "cn"]
 
 
 def _load_meta_data() -> list[dict]:
@@ -48,6 +49,22 @@ def _filter_and_score(rows: list[dict], role: Role, tier: Tier) -> list[dict]:
         )
 
     return sorted(filtered, key=lambda item: item["priority_score"], reverse=True)
+
+
+def _resolve_champion_name(row: dict, name_lang: NameLang) -> str:
+    hero_id = str(row.get("hero_id", "")).strip()
+    if name_lang == "cn":
+        return row.get("hero_name_cn") or row.get("hero_name_global") or row.get("champion") or f"hero_{hero_id}"
+    return row.get("hero_name_global") or row.get("hero_name_cn") or row.get("champion") or f"hero_{hero_id}"
+
+
+def _with_champion_lang(rows: list[dict], name_lang: NameLang) -> list[dict]:
+    localized: list[dict] = []
+    for row in rows:
+        row_copy = dict(row)
+        row_copy["champion"] = _resolve_champion_name(row_copy, name_lang)
+        localized.append(row_copy)
+    return localized
 
 
 def _load_cn_with_cache(role: Role, tier: Tier) -> tuple[list[dict] | None, str | None]:
@@ -71,29 +88,31 @@ def health() -> dict[str, str]:
 
 
 @app.get("/meta")
-def meta(role: Role, tier: Tier, source: Source = "auto") -> dict[str, list[dict] | str]:
+def meta(role: Role, tier: Tier, source: Source = "auto", name_lang: NameLang = "global") -> dict[str, list[dict] | str]:
     if source == "sample":
         rows = _filter_and_score(_load_meta_data(), role=role, tier=tier)
-        return {"items": rows, "source": "sample"}
+        return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample"}
 
     if source == "cn":
         try:
             cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
             if not cn_rows:
                 raise RuntimeError("CN source returned empty data")
-            return {"items": _filter_and_score(cn_rows, role=role, tier=tier), "source": used_source or "cn_cache"}
+            rows = _filter_and_score(cn_rows, role=role, tier=tier)
+            return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": used_source or "cn_cache"}
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"CN source unavailable: {exc}") from exc
 
     try:
         cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
         if cn_rows:
-            return {"items": _filter_and_score(cn_rows, role=role, tier=tier), "source": used_source or "cn_cache"}
+            rows = _filter_and_score(cn_rows, role=role, tier=tier)
+            return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": used_source or "cn_cache"}
     except Exception:
         pass
 
     rows = _filter_and_score(_load_meta_data(), role=role, tier=tier)
-    return {"items": rows, "source": "sample"}
+    return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample"}
 
 
 @app.get("/meta/source")
