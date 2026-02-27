@@ -209,3 +209,39 @@ def test_fetch_cn_meta_filters_multilane_duplicates_by_position(monkeypatch):
     assert all(row["position"] == 3 for row in mid_rows)
 
 
+
+
+def test_summarize_cn_positions_groups_lane_distribution(monkeypatch):
+    monkeypatch.setattr(
+        "app.fetch_cn_meta.get_cached_raw_payload",
+        lambda tier: {
+            "result": 0,
+            "data": {
+                "3": {
+                    "rows": [
+                        {"hero_id": 10001, "position": "1", "win_rate": 0.51, "appear_rate": 0.10, "forbid_rate": 0.30},
+                        {"hero_id": 10002, "position": "1", "win_rate": 0.52, "appear_rate": 0.10, "forbid_rate": 0.20},
+                        {"hero_id": 10003, "position": "2", "win_rate": 0.53, "appear_rate": 0.10, "forbid_rate": 0.10},
+                    ]
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "app.fetch_cn_meta.fetch_hero_map_from_gtimg",
+        lambda: {
+            "10001": {"hero_name_global": "Aatrox", "lane": "单人路"},
+            "10002": {"hero_name_global": "Graves", "lane": "打野;单人路"},
+            "10003": {"hero_name_global": "Ahri", "lane": "中路"},
+        },
+    )
+
+    from app.fetch_cn_meta import summarize_cn_positions
+
+    payload = summarize_cn_positions(tier="challenger")
+
+    assert payload["tier"] == "challenger"
+    assert payload["positions"]["1"]["count"] == 2
+    assert payload["positions"]["1"]["lane_dist"]["单人路"]["count"] == 2
+    assert payload["positions"]["1"]["top_bans"][0]["hero_id"] == "10001"
+    assert payload["positions"]["2"]["dominant_lanes"] == ["中路"]

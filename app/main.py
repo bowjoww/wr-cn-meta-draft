@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -14,7 +15,6 @@ from app.fetch_cn_meta import (
     cache_age_seconds,
     fetch_cn_payload,
     fetch_hero_map_from_gtimg,
-    get_cached_raw_payload,
     get_cached_meta,
     hero_map_cache_age_seconds,
     is_cache_fresh,
@@ -25,6 +25,7 @@ from app.fetch_cn_meta import (
 from app.scoring import priority_score
 
 app = FastAPI(title="WR CN Meta Viewer")
+logger = logging.getLogger(__name__)
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_cn_meta.json"
 STATIC_INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
@@ -104,6 +105,17 @@ def meta(role: Role, tier: Tier, source: Source = "auto", name_lang: NameLang = 
             cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
             if not cn_rows:
                 raise RuntimeError("CN source returned empty data")
+            selected_position = {"top": 1, "jungle": 2, "mid": 3, "adc": 4, "support": 5}[role]
+            preview = [
+                {"hero_id": row.get("hero_id"), "position": row.get("position")}
+                for row in cn_rows[:3]
+            ]
+            logger.info(
+                "CN meta debug role=%s selected_position=%s first_entries=%s",
+                role,
+                selected_position,
+                preview,
+            )
             rows = _filter_and_score(cn_rows, role=role, tier=tier)
             return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": used_source or "cn_cache"}
         except Exception as exc:
@@ -112,6 +124,17 @@ def meta(role: Role, tier: Tier, source: Source = "auto", name_lang: NameLang = 
     try:
         cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
         if cn_rows:
+            selected_position = {"top": 1, "jungle": 2, "mid": 3, "adc": 4, "support": 5}[role]
+            preview = [
+                {"hero_id": row.get("hero_id"), "position": row.get("position")}
+                for row in cn_rows[:3]
+            ]
+            logger.info(
+                "CN meta debug role=%s selected_position=%s first_entries=%s",
+                role,
+                selected_position,
+                preview,
+            )
             rows = _filter_and_score(cn_rows, role=role, tier=tier)
             return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": used_source or "cn_cache"}
     except Exception:
@@ -154,11 +177,7 @@ def meta_source() -> dict[str, str | int | bool | None]:
 @app.get("/meta/debug/cn_positions")
 def meta_debug_cn_positions(tier: Tier) -> dict[str, dict | str]:
     try:
-        payload = get_cached_raw_payload(tier=tier)
-        if payload is None:
-            payload = fetch_cn_payload(tier=tier)
-        hero_map = fetch_hero_map_from_gtimg()
-        summary = summarize_cn_positions(payload=payload, tier=tier, hero_map=hero_map)
-        return {"tier": tier, **summary}
+        summary = summarize_cn_positions(tier=tier)
+        return summary
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"CN source unavailable: {exc}") from exc
