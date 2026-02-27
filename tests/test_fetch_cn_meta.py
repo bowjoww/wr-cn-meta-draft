@@ -18,7 +18,7 @@ def _stats_payload(hero_id: int) -> dict:
         "result": 0,
         "data": {
             "1": {
-                "2": [
+                "1": [
                     {
                         "hero_id": hero_id,
                         "win_rate": 0.51,
@@ -26,6 +26,25 @@ def _stats_payload(hero_id: int) -> dict:
                         "forbid_rate": 0.09,
                     }
                 ]
+            }
+        },
+    }
+
+
+def _stats_payload_by_position(position_to_hero_id: dict[str, int]) -> dict:
+    return {
+        "result": 0,
+        "data": {
+            "1": {
+                position: [
+                    {
+                        "hero_id": hero_id,
+                        "win_rate": 0.51,
+                        "appear_rate": 0.12,
+                        "forbid_rate": 0.09,
+                    }
+                ]
+                for position, hero_id in position_to_hero_id.items()
             }
         },
     }
@@ -59,3 +78,29 @@ def test_extract_hero_map_from_js_fixture():
 
     assert hero_map["10001"]["hero_name_cn"] == "蛮王"
     assert hero_map["10001"]["hero_name_global"] == "Tryndamere"
+
+
+def test_fetch_cn_meta_role_position_mapping_mid_adc_support(monkeypatch):
+    monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr(
+        "app.fetch_cn_meta._request_with_rate_limit",
+        lambda url: DummyResponse(
+            _stats_payload_by_position(
+                {
+                    "1": 10001,
+                    "2": 10002,
+                    "3": 10003,
+                    "4": 10004,
+                    "5": 10005,
+                }
+            )
+        ),
+    )
+
+    mid_rows = fetch_cn_meta(role="mid", tier="diamond")
+    adc_rows = fetch_cn_meta(role="adc", tier="diamond")
+    support_rows = fetch_cn_meta(role="support", tier="diamond")
+
+    assert mid_rows[0]["hero_id"] == "10003"
+    assert adc_rows[0]["hero_id"] == "10004"
+    assert support_rows[0]["hero_id"] == "10005"
