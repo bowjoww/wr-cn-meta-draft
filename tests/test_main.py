@@ -56,6 +56,61 @@ def test_cn_cache_within_ttl_skips_network_fetch(monkeypatch):
     assert called["fetch"] is False
 
 
+
+
+def test_meta_name_lang_global_uses_global_champion_name(monkeypatch):
+    cached_items = [
+        {
+            "hero_id": "23",
+            "hero_name_cn": "蛮王",
+            "hero_name_global": "Tryndamere",
+            "champion": "蛮王",
+            "role": "top",
+            "tier": "diamond",
+            "winrate": 0.55,
+            "pickrate": 0.12,
+            "banrate": 0.33,
+        }
+    ]
+
+    monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: cached_items)
+
+    response = client.get(
+        "/meta",
+        params={"role": "top", "tier": "diamond", "source": "cn", "name_lang": "global"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["champion"] == "Tryndamere"
+
+
+def test_meta_name_lang_cn_uses_chinese_champion_name(monkeypatch):
+    cached_items = [
+        {
+            "hero_id": "23",
+            "hero_name_cn": "蛮王",
+            "hero_name_global": "Tryndamere",
+            "champion": "Tryndamere",
+            "role": "top",
+            "tier": "diamond",
+            "winrate": 0.55,
+            "pickrate": 0.12,
+            "banrate": 0.33,
+        }
+    ]
+
+    monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: cached_items)
+
+    response = client.get(
+        "/meta",
+        params={"role": "top", "tier": "diamond", "source": "cn", "name_lang": "cn"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["champion"] == "蛮王"
+
 def test_meta_source_returns_cn_cache_when_fresh(tmp_path, monkeypatch):
     now = datetime.now(timezone.utc)
     cache_payload = {

@@ -106,7 +106,7 @@ def discover_endpoints() -> dict[str, Any]:
     }
 
 
-def _extract_hero_map(js_text: str) -> dict[str, str]:
+def _extract_hero_map(js_text: str) -> dict[str, dict[str, str]]:
     parse_errors: list[str] = []
     payload_candidates: list[tuple[str, str]] = []
 
@@ -175,8 +175,21 @@ def _normalize_json_like_payload(payload: str) -> str:
     return re.sub(r"'([^'\\]*(?:\\.[^'\\]*)*)'", _replace_single_quote, normalized)
 
 
-def _build_hero_map(payload: Any) -> dict[str, str]:
-    hero_map: dict[str, str] = {}
+def _global_name_from_poster(poster: str | None) -> str | None:
+    if not poster:
+        return None
+    basename = Path(str(poster).split("?", 1)[0]).name
+    if not basename:
+        return None
+
+    normalized = re.sub(r"_\d+\.[^.]+$", "", basename)
+    if not normalized:
+        return None
+    return normalized
+
+
+def _build_hero_map(payload: Any) -> dict[str, dict[str, str]]:
+    hero_map: dict[str, dict[str, str]] = {}
 
     def _visit(node: Any) -> None:
         if isinstance(node, list):
@@ -193,20 +206,28 @@ def _build_hero_map(payload: Any) -> dict[str, str]:
                 hero_id_value = node.get(hero_id_key)
                 break
 
-        hero_name_value = None
+        hero_name_cn = None
         for name_key in ("name", "cname", "title"):
             if node.get(name_key):
-                hero_name_value = node.get(name_key)
+                hero_name_cn = node.get(name_key)
                 break
 
-        if hero_id_value is not None and hero_name_value:
+        hero_name_global = _global_name_from_poster(node.get("poster"))
+
+        if hero_id_value is not None and (hero_name_cn or hero_name_global):
             try:
                 hero_id = int(str(hero_id_value).strip())
             except ValueError:
                 hero_id = None
 
             if hero_id is not None:
-                hero_map[str(hero_id)] = str(hero_name_value).strip()
+                row: dict[str, str] = {}
+                if hero_name_cn:
+                    row["hero_name_cn"] = str(hero_name_cn).strip()
+                if hero_name_global:
+                    row["hero_name_global"] = str(hero_name_global).strip()
+                if row:
+                    hero_map[str(hero_id)] = row
 
         for value in node.values():
             _visit(value)
@@ -229,7 +250,7 @@ def _cache_age_from_fetched_at(fetched_at: str | None) -> int:
     return int((datetime.now(timezone.utc) - parsed).total_seconds())
 
 
-def fetch_hero_map_from_gtimg() -> dict[str, str]:
+def fetch_hero_map_from_gtimg() -> dict[str, dict[str, str]]:
     cache_payload = _read_json_cache(HERO_MAP_CACHE_PATH)
     if cache_payload and _cache_age_from_fetched_at(cache_payload.get("fetched_at")) <= HERO_MAP_CACHE_TTL_SECONDS:
         return (cache_payload.get("items") or {})
@@ -254,16 +275,21 @@ def hero_map_cache_age_seconds() -> int | None:
     return _cache_age_from_fetched_at(cache_payload.get("fetched_at"))
 
 
-def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[str, str]) -> dict[str, Any]:
+def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[str, dict[str, str]]) -> dict[str, Any]:
     hero_id = str(row.get("hero_id", "")).strip()
+    hero_data = hero_map.get(hero_id) or {}
+    hero_name_cn = hero_data.get("hero_name_cn") or row.get("hero_name") or row.get("hero_title")
+    hero_name_global = hero_data.get("hero_name_global")
     champion = (
-        hero_map.get(hero_id)
-        or row.get("hero_name")
-        or row.get("hero_title")
+        hero_name_global
+        or hero_name_cn
         or f"hero_{hero_id}"
     )
 
-    return {
+    normalized = {
+        "hero_id": hero_id,
+        "hero_name_cn": hero_name_cn,
+        "hero_name_global": hero_name_global,
         "champion": champion,
         "role": role,
         "tier": tier,
@@ -271,6 +297,7 @@ def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[
         "pickrate": float(row.get("appear_rate", 0.0)),
         "banrate": float(row.get("forbid_rate", 0.0)),
     }
+    return normalized
 
 
 def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
