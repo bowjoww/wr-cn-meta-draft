@@ -105,7 +105,7 @@ def meta(role: Role, tier: Tier, source: Source = "auto", name_lang: NameLang = 
             cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
             if not cn_rows:
                 raise RuntimeError("CN source returned empty data")
-            selected_position = {"top": 1, "jungle": 2, "mid": 3, "adc": 4, "support": 5}[role]
+            selected_position = {"top": 2, "jungle": 5, "mid": 1, "adc": 3, "support": 4}[role]
             preview = [
                 {"hero_id": row.get("hero_id"), "position": row.get("position")}
                 for row in cn_rows[:3]
@@ -124,7 +124,7 @@ def meta(role: Role, tier: Tier, source: Source = "auto", name_lang: NameLang = 
     try:
         cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
         if cn_rows:
-            selected_position = {"top": 1, "jungle": 2, "mid": 3, "adc": 4, "support": 5}[role]
+            selected_position = {"top": 2, "jungle": 5, "mid": 1, "adc": 3, "support": 4}[role]
             preview = [
                 {"hero_id": row.get("hero_id"), "position": row.get("position")}
                 for row in cn_rows[:3]
