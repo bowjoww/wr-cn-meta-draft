@@ -34,6 +34,21 @@ def _cn_payload_positions() -> dict:
     }
 
 
+def _cn_payload_positions_named() -> dict:
+    return {
+        "result": 0,
+        "data": {
+            "0": {
+                "1": [{"hero_id": 401, "hero_name": "TOP_HERO", "position": 1, "win_rate": 0.51, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "2": [{"hero_id": 402, "hero_name": "JG_HERO", "position": "2", "win_rate": 0.52, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "3": [{"hero_id": 403, "hero_name": "MID_HERO", "position": 3, "win_rate": 0.53, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "4": [{"hero_id": 404, "hero_name": "ADC_HERO", "position": "4", "win_rate": 0.54, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "5": [{"hero_id": 405, "hero_name": "SUP_HERO", "position": 5, "win_rate": 0.55, "appear_rate": 0.10, "forbid_rate": 0.01}],
+            }
+        },
+    }
+
+
 def _cn_payload_with_duplicates() -> dict:
     return {
         "result": 0,
@@ -293,6 +308,61 @@ def test_cache_filter_per_request_does_not_shift_roles(monkeypatch):
     assert response_jungle.status_code == 200
     assert response_jungle.json()["items"][0]["hero_id"] == "102"
     assert response_top.json()["items"][0]["hero_id"] != response_jungle.json()["items"][0]["hero_id"]
+
+
+def test_meta_cn_uses_fixed_role_position_mapping_with_named_payload(monkeypatch):
+    monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
+    monkeypatch.setattr("app.main.update_cache", lambda tier, source_url, raw_payload: None)
+    monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: _cn_payload_positions_named())
+    monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
+
+    expected_champion_by_role = {
+        "top": "TOP_HERO",
+        "jungle": "JG_HERO",
+        "mid": "MID_HERO",
+        "adc": "ADC_HERO",
+        "support": "SUP_HERO",
+    }
+
+    for role, champion in expected_champion_by_role.items():
+        response = client.get("/meta", params={"role": role, "tier": "challenger", "source": "cn"})
+        assert response.status_code == 200
+        items = response.json()["items"]
+        assert len(items) == 1
+        assert items[0]["champion"] == champion
+
+
+def test_meta_cn_cached_raw_payload_filters_per_request_with_fixed_mapping(monkeypatch):
+    monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: _cn_payload_positions_named())
+    monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
+
+    cached_payload: dict = {}
+
+    def _capture_cache(tier, source_url, raw_payload):
+        cached_payload["payload"] = raw_payload
+
+    monkeypatch.setattr("app.main.update_cache", _capture_cache)
+
+    top_response = client.get("/meta", params={"role": "top", "tier": "challenger", "source": "cn"})
+    assert top_response.status_code == 200
+    assert top_response.json()["items"][0]["champion"] == "TOP_HERO"
+
+    monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: (_ for _ in ()).throw(RuntimeError("should not fetch")))
+    monkeypatch.setattr(
+        "app.main.get_cached_meta",
+        lambda role, tier: __import__("app.main", fromlist=["build_cn_rows_from_payload"]).build_cn_rows_from_payload(
+            payload=cached_payload["payload"],
+            role=role,
+            tier=tier,
+            hero_map={},
+        ),
+    )
+
+    mid_response = client.get("/meta", params={"role": "mid", "tier": "challenger", "source": "cn"})
+    assert mid_response.status_code == 200
+    assert mid_response.json()["items"][0]["champion"] == "MID_HERO"
+    assert top_response.json()["items"][0]["champion"] != mid_response.json()["items"][0]["champion"]
 
 
 def test_meta_debug_cn_positions(monkeypatch):
