@@ -24,11 +24,11 @@ CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_meta_cache.js
 HERO_MAP_CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_hero_map.json"
 
 ROLE_TO_CN_POSITION = {
-    "top": "2",
-    "jungle": "5",
+    "top": "1",
+    "jungle": "2",
     "mid": "3",
     "adc": "4",
-    "support": "6",
+    "support": "5",
 }
 
 TIER_TO_CN_TIER = {
