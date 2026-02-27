@@ -107,21 +107,111 @@ def discover_endpoints() -> dict[str, Any]:
 
 
 def _extract_hero_map(js_text: str) -> dict[str, str]:
-    hero_map: dict[str, str] = {}
-    for object_match in re.finditer(r"\{[^{}]*\}", js_text):
-        item_text = object_match.group(0)
-        id_match = re.search(r'(?:hero_id|heroId|heroID|id)\s*:\s*["\']?(\d+)["\']?', item_text)
-        name_match = re.search(
-            r'(?:hero_name|heroName|name|title|cname)\s*:\s*["\']([^"\']+)["\']',
-            item_text,
-        )
-        if not id_match or not name_match:
-            continue
+    parse_errors: list[str] = []
+    payload_candidates: list[tuple[str, str]] = []
 
-        hero_map[id_match.group(1)] = name_match.group(1).strip()
+    assignment_pattern = re.compile(
+        r"(?:var\s+\w+|window\.\w+)\s*=\s*([\[{].*?[\]}])\s*;",
+        flags=re.DOTALL,
+    )
+    for match in assignment_pattern.finditer(js_text):
+        payload_candidates.append(("assignment_regex", match.group(1)))
 
+    first_list = js_text.find("[")
+    last_list = js_text.rfind("]")
+    if 0 <= first_list < last_list:
+        payload_candidates.append(("list_slice", js_text[first_list : last_list + 1]))
+    else:
+        parse_errors.append("list_slice: no valid '[' ... ']' segment found")
+
+    first_object = js_text.find("{")
+    last_object = js_text.rfind("}")
+    if 0 <= first_object < last_object:
+        payload_candidates.append(("object_slice", js_text[first_object : last_object + 1]))
+    else:
+        parse_errors.append("object_slice: no valid '{' ... '}' segment found")
+
+    parsed_payload: Any | None = None
+    for strategy, payload in payload_candidates:
+        parsed_payload = _parse_json_like_payload(payload)
+        if parsed_payload is not None:
+            break
+        parse_errors.append(f"{strategy}: failed to decode payload")
+
+    if parsed_payload is None:
+        detail = "; ".join(parse_errors) if parse_errors else "unknown parser error"
+        raise RuntimeError(f"Could not parse hero map from hero_list.js ({detail})")
+
+    hero_map = _build_hero_map(parsed_payload)
     if not hero_map:
-        raise RuntimeError("Could not parse hero map from hero_list.js")
+        raise RuntimeError("Could not parse hero map from hero_list.js (no hero rows found)")
+    return hero_map
+
+
+def _parse_json_like_payload(payload: str) -> Any | None:
+    payload = payload.strip().rstrip(";")
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        pass
+
+    normalized = _normalize_json_like_payload(payload)
+    try:
+        return json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
+
+
+def _normalize_json_like_payload(payload: str) -> str:
+    normalized = re.sub(r",\s*([}\]])", r"\1", payload)
+    normalized = re.sub(r'([\{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:', r'\1"\2":', normalized)
+
+    def _replace_single_quote(match: re.Match[str]) -> str:
+        content = match.group(1)
+        content = content.replace('\\"', '"')
+        content = content.replace('"', '\\"')
+        return f'"{content}"'
+
+    return re.sub(r"'([^'\\]*(?:\\.[^'\\]*)*)'", _replace_single_quote, normalized)
+
+
+def _build_hero_map(payload: Any) -> dict[str, str]:
+    hero_map: dict[str, str] = {}
+
+    def _visit(node: Any) -> None:
+        if isinstance(node, list):
+            for item in node:
+                _visit(item)
+            return
+
+        if not isinstance(node, dict):
+            return
+
+        hero_id_value = None
+        for hero_id_key in ("heroId", "hero_id", "id"):
+            if hero_id_key in node:
+                hero_id_value = node.get(hero_id_key)
+                break
+
+        hero_name_value = None
+        for name_key in ("name", "cname", "title"):
+            if node.get(name_key):
+                hero_name_value = node.get(name_key)
+                break
+
+        if hero_id_value is not None and hero_name_value:
+            try:
+                hero_id = int(str(hero_id_value).strip())
+            except ValueError:
+                hero_id = None
+
+            if hero_id is not None:
+                hero_map[str(hero_id)] = str(hero_name_value).strip()
+
+        for value in node.values():
+            _visit(value)
+
+    _visit(payload)
     return hero_map
 
 

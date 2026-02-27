@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from app.fetch_cn_meta import fetch_cn_meta
+from pathlib import Path
+
+from app.fetch_cn_meta import _extract_hero_map, fetch_cn_meta
 
 
 class DummyResponse:
@@ -47,3 +49,12 @@ def test_fetch_cn_meta_fallbacks_to_hero_id_when_missing_in_map(monkeypatch):
 
     assert rows
     assert rows[0]["champion"] == "hero_19999"
+
+
+def test_extract_hero_map_from_js_fixture():
+    fixture_path = Path(__file__).resolve().parent / "fixtures" / "hero_list_sample.js"
+    js_text = fixture_path.read_text(encoding="utf-8")
+
+    hero_map = _extract_hero_map(js_text)
+
+    assert hero_map["10001"] == "X"
