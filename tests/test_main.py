@@ -39,11 +39,11 @@ def _cn_payload_positions_named() -> dict:
         "result": 0,
         "data": {
             "0": {
-                "1": [{"hero_id": 401, "hero_name": "TOP_HERO", "position": 1, "win_rate": 0.51, "appear_rate": 0.10, "forbid_rate": 0.01}],
-                "2": [{"hero_id": 402, "hero_name": "JG_HERO", "position": "2", "win_rate": 0.52, "appear_rate": 0.10, "forbid_rate": 0.01}],
-                "3": [{"hero_id": 403, "hero_name": "MID_HERO", "position": 3, "win_rate": 0.53, "appear_rate": 0.10, "forbid_rate": 0.01}],
-                "4": [{"hero_id": 404, "hero_name": "ADC_HERO", "position": "4", "win_rate": 0.54, "appear_rate": 0.10, "forbid_rate": 0.01}],
-                "5": [{"hero_id": 405, "hero_name": "SUP_HERO", "position": 5, "win_rate": 0.55, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "1": [{"hero_id": 401, "hero_name": "MID_HERO", "position": 1, "win_rate": 0.51, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "2": [{"hero_id": 402, "hero_name": "TOP_HERO", "position": "2", "win_rate": 0.52, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "3": [{"hero_id": 403, "hero_name": "ADC_HERO", "position": 3, "win_rate": 0.53, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "4": [{"hero_id": 404, "hero_name": "SUP_HERO", "position": "4", "win_rate": 0.54, "appear_rate": 0.10, "forbid_rate": 0.01}],
+                "5": [{"hero_id": 405, "hero_name": "JG_HERO", "position": 5, "win_rate": 0.55, "appear_rate": 0.10, "forbid_rate": 0.01}],
             }
         },
     }
@@ -55,12 +55,12 @@ def _cn_payload_with_duplicates() -> dict:
         "data": {
             "0": {
                 "1": [
-                    {"hero_id": 201, "position": "1", "win_rate": 0.50, "appear_rate": 0.10, "forbid_rate": 0.20},
-                    {"hero_id": 201, "position": "1", "win_rate": 0.55, "appear_rate": 0.11, "forbid_rate": 0.25},
-                    {"hero_id": 202, "position": "1", "win_rate": 0.52, "appear_rate": 0.09, "forbid_rate": 0.10},
+                    {"hero_id": 201, "position": "2", "win_rate": 0.50, "appear_rate": 0.10, "forbid_rate": 0.20},
+                    {"hero_id": 201, "position": "2", "win_rate": 0.55, "appear_rate": 0.11, "forbid_rate": 0.25},
+                    {"hero_id": 202, "position": "2", "win_rate": 0.52, "appear_rate": 0.09, "forbid_rate": 0.10},
                 ],
                 "2": [
-                    {"hero_id": 301, "position": "2", "win_rate": 0.51, "appear_rate": 0.12, "forbid_rate": 0.13}
+                    {"hero_id": 301, "position": "1", "win_rate": 0.51, "appear_rate": 0.12, "forbid_rate": 0.13}
                 ],
             }
         },
@@ -218,11 +218,11 @@ def test_meta_cn_role_to_position_mapping_for_all_roles(monkeypatch):
     )
 
     expected = {
-        "top": "1",
-        "jungle": "2",
-        "mid": "3",
-        "adc": "4",
-        "support": "5",
+        "top": "2",
+        "jungle": "5",
+        "mid": "1",
+        "adc": "3",
+        "support": "4",
     }
 
     for role, position in expected.items():
@@ -255,8 +255,8 @@ def test_meta_cn_support_does_not_return_jungle(monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     hero_ids = {item["hero_id"] for item in payload["items"]}
-    assert "105" in hero_ids
-    assert "102" not in hero_ids
+    assert "104" in hero_ids
+    assert "105" not in hero_ids
 
 
 def test_meta_cn_dedup_by_hero_id_keeps_best_score(monkeypatch):
@@ -290,7 +290,7 @@ def test_cache_filter_per_request_does_not_shift_roles(monkeypatch):
 
     response_top = client.get("/meta", params={"role": "top", "tier": "challenger", "source": "cn"})
     assert response_top.status_code == 200
-    assert response_top.json()["items"][0]["hero_id"] == "101"
+    assert response_top.json()["items"][0]["hero_id"] == "102"
 
     monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: (_ for _ in ()).throw(RuntimeError("should not fetch")))
     monkeypatch.setattr(
@@ -306,7 +306,7 @@ def test_cache_filter_per_request_does_not_shift_roles(monkeypatch):
     response_jungle = client.get("/meta", params={"role": "jungle", "tier": "challenger", "source": "cn"})
 
     assert response_jungle.status_code == 200
-    assert response_jungle.json()["items"][0]["hero_id"] == "102"
+    assert response_jungle.json()["items"][0]["hero_id"] == "105"
     assert response_top.json()["items"][0]["hero_id"] != response_jungle.json()["items"][0]["hero_id"]
 
 
