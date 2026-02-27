@@ -24,11 +24,11 @@ CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_meta_cache.js
 HERO_MAP_CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_hero_map.json"
 
 ROLE_TO_POSITION = {
-    "top": "1",
-    "jungle": "2",
-    "mid": "3",
-    "adc": "4",
-    "support": "5",
+    "top": 1,
+    "jungle": 2,
+    "mid": 3,
+    "adc": 4,
+    "support": 5,
 }
 
 TIER_TO_CN_TIER = {
@@ -293,9 +293,10 @@ def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[
         "champion": champion,
         "role": role,
         "tier": tier,
-        "winrate": float(row.get("win_rate", 0.0)),
-        "pickrate": float(row.get("appear_rate", 0.0)),
-        "banrate": float(row.get("forbid_rate", 0.0)),
+        "position": _safe_int(row.get("position")),
+        "winrate": _rate_to_ratio(row, "win_rate", "win_rate_percent"),
+        "pickrate": _rate_to_ratio(row, "appear_rate", "appear_rate_percent"),
+        "banrate": _rate_to_ratio(row, "forbid_rate", "forbid_rate_percent"),
     }
     return normalized
 
@@ -322,66 +323,146 @@ def _collect_hero_entries(node: Any) -> list[dict[str, Any]]:
     return entries
 
 
-def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
-    if role not in ROLE_TO_POSITION:
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_float(value: Any) -> float | None:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _rate_to_ratio(row: dict[str, Any], raw_key: str, percent_key: str) -> float:
+    raw_value = _as_float(row.get(raw_key))
+    if raw_value is not None:
+        return raw_value / 100.0 if raw_value > 1 else raw_value
+
+    percent_value = _as_float(row.get(percent_key))
+    if percent_value is not None:
+        return percent_value / 100.0
+    return 0.0
+
+
+def role_to_position(role: str) -> int:
+    normalized = str(role).strip().lower()
+    if normalized not in ROLE_TO_POSITION:
         raise ValueError(f"Unsupported role: {role}")
+    return ROLE_TO_POSITION[normalized]
+
+
+def extract_cn_entries(payload: Any) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+
+    def _visit(current: Any) -> None:
+        if isinstance(current, list):
+            for item in current:
+                _visit(item)
+            return
+
+        if not isinstance(current, dict):
+            return
+
+        has_minimum_fields = (
+            current.get("hero_id") is not None
+            and current.get("position") is not None
+            and (current.get("win_rate") is not None or current.get("win_rate_percent") is not None)
+            and (current.get("appear_rate") is not None or current.get("appear_rate_percent") is not None)
+            and (current.get("forbid_rate") is not None or current.get("forbid_rate_percent") is not None)
+        )
+        if has_minimum_fields:
+            entries.append(current)
+
+        for value in current.values():
+            _visit(value)
+
+    _visit(payload)
+    return entries
+
+
+def _tier_candidate_nodes(payload: dict[str, Any], tier: str) -> list[Any]:
+    data = payload.get("data") or {}
+    tier_key = TIER_TO_CN_TIER[tier]
+    if not isinstance(data, dict):
+        return [data]
+
+    candidates: list[Any] = []
+    for key in (tier_key, "0"):
+        node = data.get(key)
+        if node is not None:
+            candidates.append(node)
+    if not candidates:
+        candidates.append(data)
+    return candidates
+
+
+def fetch_cn_payload(tier: str) -> dict[str, Any]:
     if tier not in TIER_TO_CN_TIER:
         raise ValueError(f"Unsupported tier: {tier}")
 
-    hero_map = fetch_hero_map_from_gtimg()
-    list_url = HERO_STATS_URL
-
-    payload = _request_with_rate_limit(list_url).json()
+    payload = _request_with_rate_limit(HERO_STATS_URL).json()
     if payload.get("result") != 0:
         raise RuntimeError("CN API returned non-zero result")
+    return payload
 
-    data = payload.get("data") or {}
-    position = ROLE_TO_POSITION[role]
 
-    def _candidate_nodes_for_tier(raw_data: Any, tier_key: str) -> list[Any]:
-        if not isinstance(raw_data, dict):
-            return [raw_data]
+def build_cn_rows_from_payload(payload: dict[str, Any], role: str, tier: str, hero_map: dict[str, dict[str, str]]) -> list[dict[str, Any]]:
+    position = role_to_position(role)
+    all_entries: list[dict[str, Any]] = []
+    for node in _tier_candidate_nodes(payload, tier):
+        all_entries.extend(extract_cn_entries(node))
 
-        candidates: list[Any] = []
-        for key in (tier_key, "0"):
-            node = raw_data.get(key)
-            if node is not None:
-                candidates.append(node)
-        candidates.append(raw_data)
-        return candidates
-
-    def _find_position_bucket(node: Any, pos: str) -> Any | None:
-        queue: list[Any] = [node]
-        while queue:
-            current = queue.pop(0)
-            if isinstance(current, dict):
-                if pos in current:
-                    return current[pos]
-                queue.extend(current.values())
-            elif isinstance(current, list):
-                queue.extend(current)
-        return None
-
-    selected_bucket = None
-    for candidate in _candidate_nodes_for_tier(data, TIER_TO_CN_TIER[tier]):
-        selected_bucket = _find_position_bucket(candidate, position)
-        if selected_bucket is not None:
-            break
-
-    source_bucket = selected_bucket if selected_bucket is not None else data
-    rows = _collect_hero_entries(source_bucket)
-    rows = [
-        row
-        for row in rows
-        if not row.get("position") or str(row.get("position", "")).strip() == position
-    ]
-
-    normalized = [_normalize_cn_row(row, role=role, tier=tier, hero_map=hero_map) for row in rows]
+    entries = [entry for entry in all_entries if _safe_int(entry.get("position")) == position]
+    normalized = [_normalize_cn_row(entry, role=role, tier=tier, hero_map=hero_map) for entry in entries]
     normalized = [row for row in normalized if row["champion"]]
     if not normalized:
-        raise RuntimeError(f"CN API returned empty payload for role={role}, tier={tier}")
-
+        raise RuntimeError("CN API returned empty payload for requested role/position")
     return normalized
+
+
+def summarize_cn_positions(payload: dict[str, Any], tier: str, hero_map: dict[str, dict[str, str]]) -> dict[str, Any]:
+    counts: dict[str, int] = {str(pos): 0 for pos in range(1, 6)}
+    top_by_position: dict[str, list[dict[str, Any]]] = {str(pos): [] for pos in range(1, 6)}
+
+    all_entries: list[dict[str, Any]] = []
+    for node in _tier_candidate_nodes(payload, tier):
+        all_entries.extend(extract_cn_entries(node))
+
+    for entry in all_entries:
+        position = _safe_int(entry.get("position"))
+        if position is None:
+            continue
+        key = str(position)
+        if key not in counts:
+            counts[key] = 0
+            top_by_position[key] = []
+        counts[key] += 1
+
+        top_by_position[key].append(
+            _normalize_cn_row(
+                entry,
+                role="debug",
+                tier=tier,
+                hero_map=hero_map,
+            )
+        )
+
+    top3 = {
+        key: sorted(rows, key=lambda item: item.get("banrate", 0.0), reverse=True)[:3]
+        for key, rows in top_by_position.items()
+    }
+    return {"counts": counts, "top3_by_banrate": top3}
+
+
+def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
+    role_to_position(role)
+    hero_map = fetch_hero_map_from_gtimg()
+    payload = fetch_cn_payload(tier=tier)
+    return build_cn_rows_from_payload(payload=payload, role=role, tier=tier, hero_map=hero_map)
 
 
 def read_cache() -> dict[str, Any] | None:
@@ -403,17 +484,34 @@ def get_cached_meta(role: str, tier: str) -> list[dict[str, Any]] | None:
 
     key = f"{role}:{tier}"
     rows = (cache_payload.get("items") or {}).get(key)
-    if not rows:
+    if rows:
+        return rows
+
+    raw_payload = (cache_payload.get("raw_payload_by_tier") or {}).get(tier)
+    if not raw_payload:
         return None
 
-    return rows
+    hero_map = fetch_hero_map_from_gtimg()
+    try:
+        return build_cn_rows_from_payload(payload=raw_payload, role=role, tier=tier, hero_map=hero_map)
+    except RuntimeError:
+        return None
 
 
-def update_cache(role: str, tier: str, rows: list[dict[str, Any]], source_url: str) -> None:
+def get_cached_raw_payload(tier: str) -> dict[str, Any] | None:
+    cache_payload = read_cache()
+    if not cache_payload or not is_cache_fresh(cache_payload):
+        return None
+    return (cache_payload.get("raw_payload_by_tier") or {}).get(tier)
+
+
+def update_cache(role: str, tier: str, rows: list[dict[str, Any]], source_url: str, raw_payload: dict[str, Any] | None = None) -> None:
     payload = read_cache() or {"items": {}}
     payload["fetched_at"] = _iso_now()
     payload["source_url"] = source_url
     payload.setdefault("items", {})[f"{role}:{tier}"] = rows
+    if raw_payload is not None:
+        payload.setdefault("raw_payload_by_tier", {})[tier] = raw_payload
 
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CACHE_PATH.open("w", encoding="utf-8") as file:

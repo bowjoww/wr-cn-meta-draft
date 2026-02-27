@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.fetch_cn_meta import _extract_hero_map, fetch_cn_meta
+from app.fetch_cn_meta import _extract_hero_map, extract_cn_entries, fetch_cn_meta
 
 
 class DummyResponse:
@@ -84,6 +84,35 @@ def _nested_stats_payload_with_mixed_positions() -> dict:
     }
 
 
+
+
+def test_extract_cn_entries_from_nested_payload():
+    payload = {
+        "result": 0,
+        "data": {
+            "3": {
+                "blocks": {
+                    "0": [
+                        {"hero_id": 10010, "position": "3", "win_rate": 0.51, "appear_rate": 0.12, "forbid_rate": 0.09},
+                        {"hero_id": 10010, "position": "2", "win_rate": 0.48, "appear_rate": 0.08, "forbid_rate": 0.02},
+                    ],
+                    "1": {
+                        "rows": [
+                            {"hero_id": 10011, "position": "3", "win_rate_percent": "53.63", "appear_rate_percent": "11.00", "forbid_rate_percent": "2.40"},
+                            {"foo": "bar"},
+                        ]
+                    },
+                }
+            }
+        },
+    }
+
+    rows = extract_cn_entries(payload)
+
+    assert len(rows) == 3
+    assert {str(row["hero_id"]) for row in rows} == {"10010", "10011"}
+
+
 def test_fetch_cn_meta_uses_gtimg_hero_map(monkeypatch):
     monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {"10001": {"hero_name_cn": "安妮", "hero_name_global": "Annie"}})
     monkeypatch.setattr("app.fetch_cn_meta._request_with_rate_limit", lambda url: DummyResponse(_stats_payload(10001)))
@@ -152,3 +181,31 @@ def test_fetch_cn_meta_role_filtering_uses_row_position_without_rotation(monkeyp
     assert fetch_cn_meta(role="mid", tier="diamond")[0]["hero_id"] == "10003"
     assert fetch_cn_meta(role="adc", tier="diamond")[0]["hero_id"] == "10004"
     assert fetch_cn_meta(role="support", tier="diamond")[0]["hero_id"] == "10005"
+
+
+def test_fetch_cn_meta_filters_multilane_duplicates_by_position(monkeypatch):
+    monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr(
+        "app.fetch_cn_meta._request_with_rate_limit",
+        lambda url: DummyResponse(
+            {
+                "result": 0,
+                "data": {
+                    "1": {
+                        "mixed": [
+                            {"hero_id": 10099, "position": "2", "win_rate": 0.5, "appear_rate": 0.1, "forbid_rate": 0.01},
+                            {"hero_id": 10099, "position": "3", "win_rate": 0.6, "appear_rate": 0.2, "forbid_rate": 0.02},
+                            {"hero_id": 10100, "position": "3", "win_rate": 0.55, "appear_rate": 0.11, "forbid_rate": 0.03},
+                        ]
+                    }
+                },
+            }
+        ),
+    )
+
+    mid_rows = fetch_cn_meta(role="mid", tier="diamond")
+
+    assert {row["hero_id"] for row in mid_rows} == {"10099", "10100"}
+    assert all(row["position"] == 3 for row in mid_rows)
+
+
