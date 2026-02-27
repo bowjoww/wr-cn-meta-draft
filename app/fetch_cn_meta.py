@@ -300,6 +300,28 @@ def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[
     return normalized
 
 
+def _collect_hero_entries(node: Any) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+
+    def _visit(current: Any) -> None:
+        if isinstance(current, list):
+            for item in current:
+                _visit(item)
+            return
+
+        if not isinstance(current, dict):
+            return
+
+        if current.get("hero_id") is not None:
+            entries.append(current)
+
+        for value in current.values():
+            _visit(value)
+
+    _visit(node)
+    return entries
+
+
 def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
     if role not in ROLE_TO_CN_POSITION:
         raise ValueError(f"Unsupported role: {role}")
@@ -314,8 +336,11 @@ def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
         raise RuntimeError("CN API returned non-zero result")
 
     data = payload.get("data") or {}
-    tier_bucket = data.get(TIER_TO_CN_TIER[tier]) or {}
-    rows = tier_bucket.get(ROLE_TO_CN_POSITION[role]) or []
+    tier_bucket = data.get(TIER_TO_CN_TIER[tier])
+    source_bucket = tier_bucket if tier_bucket is not None else data
+
+    position = ROLE_TO_CN_POSITION[role]
+    rows = [row for row in _collect_hero_entries(source_bucket) if str(row.get("position", "")).strip() == position]
 
     normalized = [_normalize_cn_row(row, role=role, tier=tier, hero_map=hero_map) for row in rows]
     normalized = [row for row in normalized if row["champion"]]

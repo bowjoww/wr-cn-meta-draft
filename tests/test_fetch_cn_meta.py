@@ -21,6 +21,7 @@ def _stats_payload(hero_id: int) -> dict:
                 "1": [
                     {
                         "hero_id": hero_id,
+                        "position": "1",
                         "win_rate": 0.51,
                         "appear_rate": 0.12,
                         "forbid_rate": 0.09,
@@ -36,15 +37,48 @@ def _stats_payload_by_position(position_to_hero_id: dict[str, int]) -> dict:
         "result": 0,
         "data": {
             "1": {
-                position: [
-                    {
-                        "hero_id": hero_id,
-                        "win_rate": 0.51,
-                        "appear_rate": 0.12,
-                        "forbid_rate": 0.09,
+                "hero_rank_list": {
+                    "grouped": {
+                        position: {
+                            "entries": [
+                                {
+                                    "hero_id": hero_id,
+                                    "position": position,
+                                    "win_rate": 0.51,
+                                    "appear_rate": 0.12,
+                                    "forbid_rate": 0.09,
+                                }
+                            ]
+                        }
+                        for position, hero_id in position_to_hero_id.items()
                     }
-                ]
-                for position, hero_id in position_to_hero_id.items()
+                }
+            }
+        },
+    }
+
+
+def _nested_stats_payload_with_mixed_positions() -> dict:
+    return {
+        "result": 0,
+        "data": {
+            "1": {
+                "segment_a": {
+                    "items": [
+                        {"hero_id": 10001, "position": "1", "win_rate": 0.51, "appear_rate": 0.12, "forbid_rate": 0.09},
+                        {"hero_id": 10002, "position": "2", "win_rate": 0.52, "appear_rate": 0.13, "forbid_rate": 0.08},
+                    ]
+                },
+                "segment_b": {
+                    "deep": {
+                        "list": [
+                            {"hero_id": 10003, "position": "3", "win_rate": 0.53, "appear_rate": 0.14, "forbid_rate": 0.07},
+                            {"hero_id": 10004, "position": "4", "win_rate": 0.54, "appear_rate": 0.15, "forbid_rate": 0.06},
+                            {"hero_id": 10005, "position": "5", "win_rate": 0.55, "appear_rate": 0.16, "forbid_rate": 0.05},
+                        ]
+                    }
+                },
+                "metadata": {"version": 2},
             }
         },
     }
@@ -104,3 +138,17 @@ def test_fetch_cn_meta_role_position_mapping_mid_adc_support(monkeypatch):
     assert mid_rows[0]["hero_id"] == "10003"
     assert adc_rows[0]["hero_id"] == "10004"
     assert support_rows[0]["hero_id"] == "10005"
+
+
+def test_fetch_cn_meta_role_filtering_uses_row_position_without_rotation(monkeypatch):
+    monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr(
+        "app.fetch_cn_meta._request_with_rate_limit",
+        lambda url: DummyResponse(_nested_stats_payload_with_mixed_positions()),
+    )
+
+    assert fetch_cn_meta(role="top", tier="diamond")[0]["hero_id"] == "10001"
+    assert fetch_cn_meta(role="jungle", tier="diamond")[0]["hero_id"] == "10002"
+    assert fetch_cn_meta(role="mid", tier="diamond")[0]["hero_id"] == "10003"
+    assert fetch_cn_meta(role="adc", tier="diamond")[0]["hero_id"] == "10004"
+    assert fetch_cn_meta(role="support", tier="diamond")[0]["hero_id"] == "10005"
