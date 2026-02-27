@@ -11,6 +11,8 @@ from urllib.parse import urljoin
 
 import requests
 
+from app.scoring import priority_score
+
 CN_PAGE_URL = "https://lolm.qq.com/act/a20220818raider/index.html"
 HERO_MAP_URL = "https://game.gtimg.cn/images/lgamem/act/lrlib/js/heroList/hero_list.js"
 HERO_STATS_URL = "https://mlol.qt.qq.com/go/lgame_battle_info/hero_rank_list_v2"
@@ -298,6 +300,11 @@ def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[
         "pickrate": _rate_to_ratio(row, "appear_rate", "appear_rate_percent"),
         "banrate": _rate_to_ratio(row, "forbid_rate", "forbid_rate_percent"),
     }
+    normalized["priority_score"] = priority_score(
+        winrate=normalized["winrate"],
+        pickrate=normalized["pickrate"],
+        banrate=normalized["banrate"],
+    )
     return normalized
 
 
@@ -419,9 +426,36 @@ def build_cn_rows_from_payload(payload: dict[str, Any], role: str, tier: str, he
     entries = [entry for entry in all_entries if _safe_int(entry.get("position")) == position]
     normalized = [_normalize_cn_row(entry, role=role, tier=tier, hero_map=hero_map) for entry in entries]
     normalized = [row for row in normalized if row["champion"]]
-    if not normalized:
+    deduped = dedup_rows_by_hero_id(normalized)
+    if not deduped:
         raise RuntimeError("CN API returned empty payload for requested role/position")
-    return normalized
+    return deduped
+
+
+def dedup_rows_by_hero_id(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    winners: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        hero_id = str(row.get("hero_id", "")).strip()
+        if not hero_id:
+            continue
+        current = winners.get(hero_id)
+        if current is None or _is_row_better(row, current):
+            winners[hero_id] = row
+    return list(winners.values())
+
+
+def _is_row_better(candidate: dict[str, Any], incumbent: dict[str, Any]) -> bool:
+    candidate_key = (
+        candidate.get("priority_score", 0.0),
+        candidate.get("banrate", 0.0),
+        candidate.get("pickrate", 0.0),
+    )
+    incumbent_key = (
+        incumbent.get("priority_score", 0.0),
+        incumbent.get("banrate", 0.0),
+        incumbent.get("pickrate", 0.0),
+    )
+    return candidate_key > incumbent_key
 
 
 def summarize_cn_positions(payload: dict[str, Any], tier: str, hero_map: dict[str, dict[str, str]]) -> dict[str, Any]:
@@ -482,20 +516,18 @@ def get_cached_meta(role: str, tier: str) -> list[dict[str, Any]] | None:
     if not cache_payload or not is_cache_fresh(cache_payload):
         return None
 
+    raw_payload = (cache_payload.get("raw_payload_by_tier") or {}).get(tier)
+    if raw_payload:
+        hero_map = fetch_hero_map_from_gtimg()
+        try:
+            return build_cn_rows_from_payload(payload=raw_payload, role=role, tier=tier, hero_map=hero_map)
+        except RuntimeError:
+            return None
+
+    # Backward compatibility with legacy cache shape storing role:tier lists.
     key = f"{role}:{tier}"
     rows = (cache_payload.get("items") or {}).get(key)
-    if rows:
-        return rows
-
-    raw_payload = (cache_payload.get("raw_payload_by_tier") or {}).get(tier)
-    if not raw_payload:
-        return None
-
-    hero_map = fetch_hero_map_from_gtimg()
-    try:
-        return build_cn_rows_from_payload(payload=raw_payload, role=role, tier=tier, hero_map=hero_map)
-    except RuntimeError:
-        return None
+    return rows or None
 
 
 def get_cached_raw_payload(tier: str) -> dict[str, Any] | None:
@@ -505,13 +537,11 @@ def get_cached_raw_payload(tier: str) -> dict[str, Any] | None:
     return (cache_payload.get("raw_payload_by_tier") or {}).get(tier)
 
 
-def update_cache(role: str, tier: str, rows: list[dict[str, Any]], source_url: str, raw_payload: dict[str, Any] | None = None) -> None:
-    payload = read_cache() or {"items": {}}
+def update_cache(tier: str, source_url: str, raw_payload: dict[str, Any]) -> None:
+    payload = read_cache() or {}
     payload["fetched_at"] = _iso_now()
     payload["source_url"] = source_url
-    payload.setdefault("items", {})[f"{role}:{tier}"] = rows
-    if raw_payload is not None:
-        payload.setdefault("raw_payload_by_tier", {})[tier] = raw_payload
+    payload.setdefault("raw_payload_by_tier", {})[tier] = raw_payload
 
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CACHE_PATH.open("w", encoding="utf-8") as file:

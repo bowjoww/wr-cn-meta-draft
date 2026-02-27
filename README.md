@@ -42,6 +42,7 @@ curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=cn&name_lang=cn"
 
 - Página oficial usada para descoberta: `https://lolm.qq.com/act/a20220818raider/index.html`
 - Cache local: `data/cn_meta_cache.json`
+- O cache salva o payload bruto CN por tier (all positions), e o filtro por rota (`position`) acontece por request.
 - TTL do cache: **6 horas**
 - Metadados em cache: `fetched_at` e `source_url`
 - Rate limit global para `qq.com`: no máximo **1 request a cada 10s**
@@ -64,6 +65,10 @@ Como os códigos do endpoint CN não são 1:1 com os filtros da API local, foi a
 
 Quando o endpoint não trouxer nome canônico do campeão, o app normaliza para `hero_<hero_id>`.
 
+Deduplicação por rota:
+
+- Depois de filtrar por `position`, os itens são deduplicados por `hero_id`.
+- Se houver duplicidade, vence o registro com maior `priority_score`; em empate, maior `banrate`; persistindo, maior `pickrate`.
 
 ### Nome dos campeões no `/meta`
 

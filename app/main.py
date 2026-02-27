@@ -12,7 +12,6 @@ from app.fetch_cn_meta import (
     CN_PAGE_URL,
     build_cn_rows_from_payload,
     cache_age_seconds,
-    fetch_cn_meta,
     fetch_cn_payload,
     fetch_hero_map_from_gtimg,
     get_cached_raw_payload,
@@ -80,7 +79,7 @@ def _load_cn_with_cache(role: Role, tier: Tier) -> tuple[list[dict] | None, str 
     payload = fetch_cn_payload(tier=tier)
     hero_map = fetch_hero_map_from_gtimg()
     rows = build_cn_rows_from_payload(payload=payload, role=role, tier=tier, hero_map=hero_map)
-    update_cache(role=role, tier=tier, rows=rows, source_url=CN_PAGE_URL, raw_payload=payload)
+    update_cache(tier=tier, source_url=CN_PAGE_URL, raw_payload=payload)
     return rows, "cn_cache"
 
 
@@ -135,6 +134,7 @@ def meta_source() -> dict[str, str | int | bool | None]:
             "source_url": None,
             "hero_map_available": hero_map_age is not None,
             "hero_map_age_seconds": hero_map_age,
+            "cn_cache_has_positions": False,
         }
 
     age = cache_age_seconds(cache_payload)
@@ -147,6 +147,7 @@ def meta_source() -> dict[str, str | int | bool | None]:
         "source_url": cache_payload.get("source_url"),
         "hero_map_available": hero_map_age is not None,
         "hero_map_age_seconds": hero_map_age,
+        "cn_cache_has_positions": bool(cache_payload.get("raw_payload_by_tier")),
     }
 
 
