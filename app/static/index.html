@@ -9,10 +9,16 @@
         font-family: Arial, sans-serif;
         margin: 2rem;
       }
+      .source-banner {
+        margin-bottom: 0.75rem;
+        color: #444;
+      }
       .controls {
         display: flex;
         gap: 0.75rem;
         margin-bottom: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
       }
       table {
         width: 100%;
@@ -35,6 +41,7 @@
   </head>
   <body>
     <h1>WR CN Meta Viewer</h1>
+    <div id="sourceLabel" class="source-banner">Fonte: sample</div>
 
     <div class="controls">
       <label>
@@ -55,6 +62,11 @@
           <option value="master">master</option>
           <option value="challenger">challenger</option>
         </select>
+      </label>
+
+      <label>
+        <input id="useCn" type="checkbox" checked />
+        Usar dados CN (se disponível)
       </label>
 
       <button id="load">Carregar</button>
@@ -79,8 +91,10 @@
       const loadButton = document.getElementById("load");
       const roleSelect = document.getElementById("role");
       const tierSelect = document.getElementById("tier");
+      const useCnCheckbox = document.getElementById("useCn");
       const rowsBody = document.getElementById("rows");
       const message = document.getElementById("message");
+      const sourceLabel = document.getElementById("sourceLabel");
 
       function pct(value) {
         return `${(value * 100).toFixed(1)}%`;
@@ -102,22 +116,36 @@
         });
       }
 
+      async function refreshSourceLabel() {
+        try {
+          const response = await fetch("/meta/source");
+          if (!response.ok) return;
+          const data = await response.json();
+          sourceLabel.textContent = `Fonte: ${data.source}`;
+        } catch (err) {
+          // silent fallback
+        }
+      }
+
       async function loadMeta() {
         const role = roleSelect.value;
         const tier = tierSelect.value;
+        const source = useCnCheckbox.checked ? "auto" : "sample";
         message.textContent = "Carregando...";
 
         try {
-          const response = await fetch(`/meta?role=${role}&tier=${tier}`);
+          const response = await fetch(`/meta?role=${role}&tier=${tier}&source=${source}`);
           if (!response.ok) {
             throw new Error("Falha ao carregar dados");
           }
           const data = await response.json();
           render(data.items);
+          sourceLabel.textContent = `Fonte: ${data.source}`;
           message.textContent = `Mostrando ${data.items.length} campeões`;
         } catch (err) {
           rowsBody.innerHTML = "";
           message.textContent = err.message;
+          await refreshSourceLabel();
         }
       }
 
