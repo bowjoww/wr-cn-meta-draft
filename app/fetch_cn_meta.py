@@ -216,7 +216,13 @@ def _build_hero_map(payload: Any) -> dict[str, dict[str, str]]:
 
         hero_name_global = _global_name_from_poster(node.get("poster"))
 
-        if hero_id_value is not None and (hero_name_cn or hero_name_global):
+        hero_lane = None
+        for lane_key in ("lane", "lanes", "hero_lane", "road", "route", "position_name"):
+            if node.get(lane_key):
+                hero_lane = node.get(lane_key)
+                break
+
+        if hero_id_value is not None and (hero_name_cn or hero_name_global or hero_lane):
             try:
                 hero_id = int(str(hero_id_value).strip())
             except ValueError:
@@ -228,6 +234,8 @@ def _build_hero_map(payload: Any) -> dict[str, dict[str, str]]:
                     row["hero_name_cn"] = str(hero_name_cn).strip()
                 if hero_name_global:
                     row["hero_name_global"] = str(hero_name_global).strip()
+                if hero_lane:
+                    row["lane"] = str(hero_lane).strip()
                 if row:
                     hero_map[str(hero_id)] = row
 
@@ -462,38 +470,81 @@ def _is_row_better(candidate: dict[str, Any], incumbent: dict[str, Any]) -> bool
     return candidate_key > incumbent_key
 
 
-def summarize_cn_positions(payload: dict[str, Any], tier: str, hero_map: dict[str, dict[str, str]]) -> dict[str, Any]:
-    counts: dict[str, int] = {str(pos): 0 for pos in range(1, 6)}
-    top_by_position: dict[str, list[dict[str, Any]]] = {str(pos): [] for pos in range(1, 6)}
+def _split_lanes(lane_value: str | None) -> list[str]:
+    if not lane_value:
+        return []
+    parts = re.split(r"[;；,/，、|]", lane_value)
+    return [part.strip() for part in parts if part and part.strip()]
+
+
+def summarize_cn_positions(tier: str) -> dict[str, Any]:
+    payload = get_cached_raw_payload(tier=tier)
+    if payload is None:
+        payload = fetch_cn_payload(tier=tier)
+    hero_map = fetch_hero_map_from_gtimg()
+
+    grouped_entries: dict[str, list[dict[str, Any]]] = {}
 
     all_entries: list[dict[str, Any]] = []
     for node in _tier_candidate_nodes(payload, tier):
         all_entries.extend(extract_cn_entries(node))
 
     for entry in all_entries:
-        position = _safe_int(entry.get("position"))
-        if position is None:
+        position_raw = entry.get("position")
+        if position_raw is None:
             continue
-        key = str(position)
-        if key not in counts:
-            counts[key] = 0
-            top_by_position[key] = []
-        counts[key] += 1
+        key = str(position_raw).strip()
+        grouped_entries.setdefault(key, []).append(entry)
 
-        top_by_position[key].append(
+    positions: dict[str, dict[str, Any]] = {}
+    for position, rows in grouped_entries.items():
+        normalized_rows = [
             _normalize_cn_row(
-                entry,
+                row,
                 role="debug",
                 tier=tier,
                 hero_map=hero_map,
             )
-        )
+            for row in rows
+        ]
+        top_bans = sorted(normalized_rows, key=lambda item: item.get("banrate", 0.0), reverse=True)[:10]
 
-    top3 = {
-        key: sorted(rows, key=lambda item: item.get("banrate", 0.0), reverse=True)[:3]
-        for key, rows in top_by_position.items()
-    }
-    return {"counts": counts, "top3_by_banrate": top3}
+        lane_counts: dict[str, int] = {}
+        for row in normalized_rows:
+            lane_value = (hero_map.get(row["hero_id"]) or {}).get("lane")
+            lanes = _split_lanes(lane_value)
+            if not lanes:
+                lane_counts["未知"] = lane_counts.get("未知", 0) + 1
+                continue
+            for lane in lanes:
+                lane_counts[lane] = lane_counts.get(lane, 0) + 1
+
+        lane_total = sum(lane_counts.values()) or 1
+        lane_dist = {
+            lane: {
+                "count": count,
+                "percent": round((count / lane_total) * 100, 2),
+            }
+            for lane, count in sorted(lane_counts.items(), key=lambda item: item[1], reverse=True)
+        }
+        dominant_count = max(lane_counts.values(), default=0)
+        dominant_lanes = sorted([lane for lane, count in lane_counts.items() if count == dominant_count])
+
+        positions[position] = {
+            "count": len(rows),
+            "lane_dist": lane_dist,
+            "dominant_lanes": dominant_lanes,
+            "top_bans": [
+                {
+                    "hero_id": row["hero_id"],
+                    "champion": row["champion"],
+                    "banrate": row["banrate"],
+                }
+                for row in top_bans
+            ],
+        }
+
+    return {"tier": tier, "positions": positions}
 
 
 def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:

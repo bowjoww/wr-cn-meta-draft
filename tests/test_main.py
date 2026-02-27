@@ -366,13 +366,20 @@ def test_meta_cn_cached_raw_payload_filters_per_request_with_fixed_mapping(monke
 
 
 def test_meta_debug_cn_positions(monkeypatch):
-    monkeypatch.setattr("app.main.get_cached_raw_payload", lambda tier: _cn_payload_positions())
-    monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
+    monkeypatch.setattr(
+        "app.main.summarize_cn_positions",
+        lambda tier: {
+            "tier": tier,
+            "positions": {
+                "1": {"count": 1, "lane_dist": {"单人路": {"count": 1, "percent": 100.0}}, "dominant_lanes": ["单人路"], "top_bans": [{"hero_id": "103", "champion": "hero_103", "banrate": 0.2}]}
+            },
+        },
+    )
 
     response = client.get("/meta/debug/cn_positions", params={"tier": "challenger"})
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["counts"]["1"] == 1
-    assert payload["counts"]["5"] == 1
-    assert payload["top3_by_banrate"]["3"][0]["hero_id"] == "103"
+    assert payload["tier"] == "challenger"
+    assert payload["positions"]["1"]["count"] == 1
+    assert payload["positions"]["1"]["top_bans"][0]["hero_id"] == "103"
