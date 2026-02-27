@@ -362,6 +362,10 @@ def role_to_position(role: str) -> int:
     return ROLE_TO_POSITION[normalized]
 
 
+def _matches_position(entry: dict[str, Any], expected_position: int) -> bool:
+    return _safe_int(entry.get("position")) == expected_position
+
+
 def extract_cn_entries(payload: Any) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
 
@@ -423,7 +427,7 @@ def build_cn_rows_from_payload(payload: dict[str, Any], role: str, tier: str, he
     for node in _tier_candidate_nodes(payload, tier):
         all_entries.extend(extract_cn_entries(node))
 
-    entries = [entry for entry in all_entries if _safe_int(entry.get("position")) == position]
+    entries = [entry for entry in all_entries if _matches_position(entry, position)]
     normalized = [_normalize_cn_row(entry, role=role, tier=tier, hero_map=hero_map) for entry in entries]
     normalized = [row for row in normalized if row["champion"]]
     deduped = dedup_rows_by_hero_id(normalized)
