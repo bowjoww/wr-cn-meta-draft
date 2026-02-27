@@ -23,7 +23,7 @@ BACKOFF_SECONDS = [2, 4, 8]
 CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_meta_cache.json"
 HERO_MAP_CACHE_PATH = Path(__file__).resolve().parent.parent / "data" / "cn_hero_map.json"
 
-ROLE_TO_CN_POSITION = {
+ROLE_TO_POSITION = {
     "top": "1",
     "jungle": "2",
     "mid": "3",
@@ -323,7 +323,7 @@ def _collect_hero_entries(node: Any) -> list[dict[str, Any]]:
 
 
 def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
-    if role not in ROLE_TO_CN_POSITION:
+    if role not in ROLE_TO_POSITION:
         raise ValueError(f"Unsupported role: {role}")
     if tier not in TIER_TO_CN_TIER:
         raise ValueError(f"Unsupported tier: {tier}")
@@ -336,16 +336,50 @@ def fetch_cn_meta(role: str, tier: str) -> list[dict[str, Any]]:
         raise RuntimeError("CN API returned non-zero result")
 
     data = payload.get("data") or {}
-    tier_bucket = data.get(TIER_TO_CN_TIER[tier])
-    source_bucket = tier_bucket if tier_bucket is not None else data
+    position = ROLE_TO_POSITION[role]
 
-    position = ROLE_TO_CN_POSITION[role]
-    rows = [row for row in _collect_hero_entries(source_bucket) if str(row.get("position", "")).strip() == position]
+    def _candidate_nodes_for_tier(raw_data: Any, tier_key: str) -> list[Any]:
+        if not isinstance(raw_data, dict):
+            return [raw_data]
+
+        candidates: list[Any] = []
+        for key in (tier_key, "0"):
+            node = raw_data.get(key)
+            if node is not None:
+                candidates.append(node)
+        candidates.append(raw_data)
+        return candidates
+
+    def _find_position_bucket(node: Any, pos: str) -> Any | None:
+        queue: list[Any] = [node]
+        while queue:
+            current = queue.pop(0)
+            if isinstance(current, dict):
+                if pos in current:
+                    return current[pos]
+                queue.extend(current.values())
+            elif isinstance(current, list):
+                queue.extend(current)
+        return None
+
+    selected_bucket = None
+    for candidate in _candidate_nodes_for_tier(data, TIER_TO_CN_TIER[tier]):
+        selected_bucket = _find_position_bucket(candidate, position)
+        if selected_bucket is not None:
+            break
+
+    source_bucket = selected_bucket if selected_bucket is not None else data
+    rows = _collect_hero_entries(source_bucket)
+    rows = [
+        row
+        for row in rows
+        if not row.get("position") or str(row.get("position", "")).strip() == position
+    ]
 
     normalized = [_normalize_cn_row(row, role=role, tier=tier, hero_map=hero_map) for row in rows]
     normalized = [row for row in normalized if row["champion"]]
     if not normalized:
-        raise RuntimeError("CN API returned empty payload for requested role/tier")
+        raise RuntimeError(f"CN API returned empty payload for role={role}, tier={tier}")
 
     return normalized
 

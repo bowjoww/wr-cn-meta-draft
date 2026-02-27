@@ -52,11 +52,11 @@ curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=cn&name_lang=cn"
 Como os códigos do endpoint CN não são 1:1 com os filtros da API local, foi aplicado mapeamento:
 
 - Role:
-  - `top -> 2`
-  - `jungle -> 5`
+  - `top -> 1`
+  - `jungle -> 2`
   - `mid -> 3`
   - `adc -> 4`
-  - `support -> 6`
+  - `support -> 5`
 - Tier:
   - `diamond -> 1` (钻石以上)
   - `master -> 2` (大师以上)
