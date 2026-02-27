@@ -1,6 +1,6 @@
 # WR CN Meta Viewer
 
-MVP em FastAPI para visualizar meta de campeões por rota e tier, com métricas de **winrate**, **pickrate**, **banrate** e **PriorityScore**.
+MVP em FastAPI para visualizar meta de campeões por rota e tier, com métricas de **winrate**, **pickrate**, **banrate** e múltiplas visões de score (**Draft Priority** e **Power (PBI-like)**).
 
 ## Requisitos
 
@@ -20,7 +20,7 @@ Abra no navegador:
 ## Endpoints
 
 - `GET /health` → `{"status":"ok"}`
-- `GET /meta?role=<top|jungle|mid|adc|support>&tier=<diamond|master|challenger>&source=<auto|sample|cn>&name_lang=<global|cn>`
+- `GET /meta?role=<top|jungle|mid|adc|support>&tier=<diamond|master|challenger>&source=<auto|sample|cn>&name_lang=<global|cn>&view=<draft|power>&sort=<champion|win|pick|ban|draft_score|power_score>&dir=<asc|desc>`
 - `GET /meta/source`
 
 ### Fontes de dados (`source`)
@@ -36,7 +36,16 @@ curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=auto"
 curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=sample"
 curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=cn"
 curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=cn&name_lang=cn"
+curl "http://127.0.0.1:8000/meta?role=top&tier=diamond&source=auto&view=power&sort=power_score&dir=desc"
 ```
+
+### Vistas e ordenação na UI
+
+- A página principal possui duas abas acima da tabela:
+  - **Draft Priority** (`view=draft`)
+  - **Power (PBI-like)** (`view=power`)
+- O clique no cabeçalho da tabela ordena por coluna (`Champion`, `Win`, `Pick`, `Ban`, `Draft Priority`/`Power`) alternando `asc/desc` com indicador visual.
+- O estado atual de aba e ordenação permanece ao trocar role/tier e clicar em **Carregar**.
 
 ### Coleta CN real + cache
 
@@ -81,13 +90,21 @@ Deduplicação por rota:
   - `global`: `hero_name_global` -> `hero_name_cn` -> `hero_<id>`
   - `cn`: `hero_name_cn` -> `hero_name_global` -> `hero_<id>`
 
-### Cálculo do PriorityScore
+### Cálculo dos scores
 
 ```text
 PriorityScore = 0.5 * banrate + 0.3 * pickrate + 0.2 * winrate
+
+wr_avg = média de winrate do conjunto filtrado (role+tier)
+
+PowerScore = (winrate - wr_avg) * sqrt(pickrate) / (1 - banrate + 0.01)
+
+contest = 0.6 * banrate + 0.4 * pickrate
+strength = (winrate - wr_avg)
+DraftScore = zscore(strength) + zscore(contest)
 ```
 
-Todos os valores são normalizados entre `0` e `1`.
+As taxas (`winrate`, `pickrate`, `banrate`) usam escala `0..1`; os scores derivados podem assumir valores negativos/positivos conforme o dataset filtrado.
 
 ## Testes
 
