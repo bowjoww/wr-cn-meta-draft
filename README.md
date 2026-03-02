@@ -106,6 +106,33 @@ DraftScore = zscore(strength) + zscore(contest)
 
 As taxas (`winrate`, `pickrate`, `banrate`) usam escala `0..1`; os scores derivados podem assumir valores negativos/positivos conforme o dataset filtrado.
 
+
+## Executável para Windows 11
+
+Sim — dá para gerar um `.exe` para abrir o app com duplo clique (sem precisar iniciar pelo PowerShell toda vez).
+
+### 1) Gerar o `.exe`
+
+No **Prompt de Comando** ou **PowerShell** (uma vez só para build):
+
+```bat
+scripts\windows\build_windows_exe.bat
+```
+
+O executável será criado em:
+
+- `dist\WRMetaViewer.exe`
+
+### 2) Rodar
+
+- Dê duplo clique em `WRMetaViewer.exe`.
+- O app sobe localmente em `http://127.0.0.1:8000` e o navegador abre automaticamente.
+
+### Observações
+
+- Se a porta `8000` já estiver em uso, feche o processo que está usando a porta e abra o `.exe` novamente.
+- Para distribuir para outra máquina, envie o `WRMetaViewer.exe` junto das mesmas versões de runtime do Windows 11 (normalmente funciona direto).
+
 ## Testes
 
 ```bash
