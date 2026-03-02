@@ -133,6 +133,8 @@ O executável será criado em:
 - Se a porta `8000` já estiver em uso, feche o processo que está usando a porta e abra o `.exe` novamente.
 - Para distribuir para outra máquina, envie o `WRMetaViewer.exe` junto das mesmas versões de runtime do Windows 11 (normalmente funciona direto).
 
+- Em caso de conflito de merge em `windows_launcher.py`, mantenha a versão que usa `log_config=None` no `uvicorn.run(...)` (ou em `_uvicorn_kwargs()`), pois isso evita crash do executável em builds `--noconsole` do PyInstaller.
+
 ## Testes
 
 ```bash
