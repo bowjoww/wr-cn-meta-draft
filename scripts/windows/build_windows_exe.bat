@@ -12,6 +12,7 @@ py -m PyInstaller ^
   --onefile ^
   --noconsole ^
   --name WRMetaViewer ^
+  --hidden-import app.main ^
   --add-data "app;app" ^
   --add-data "data;data" ^
   windows_launcher.py

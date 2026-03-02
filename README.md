@@ -134,6 +134,7 @@ O executável será criado em:
 - Para distribuir para outra máquina, envie o `WRMetaViewer.exe` junto das mesmas versões de runtime do Windows 11 (normalmente funciona direto).
 
 - Em caso de conflito de merge em `windows_launcher.py`, mantenha a versão que usa `log_config=None` no `uvicorn.run(...)` (ou em `_uvicorn_kwargs()`), pois isso evita crash do executável em builds `--noconsole` do PyInstaller.
+- Se o `.exe` mostrar erro `ModuleNotFoundError: No module named 'fastapi'`, gere novamente após atualizar o script de build (agora com `--hidden-import app.main`) para forçar o PyInstaller a incluir as dependências do app carregado dinamicamente pelo Uvicorn.
 
 ## Testes
 
