@@ -10,6 +10,9 @@ from pathlib import Path
 
 import uvicorn
 
+HOST = "127.0.0.1"
+PORT = 8000
+
 
 def _project_root() -> Path:
     if getattr(sys, "frozen", False):
@@ -22,20 +25,33 @@ def _wait_and_open_browser(url: str, timeout_seconds: float = 15.0) -> None:
     while time.time() < deadline:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.settimeout(0.5)
-            if sock.connect_ex(("127.0.0.1", 8000)) == 0:
+            if sock.connect_ex((HOST, PORT)) == 0:
                 webbrowser.open(url)
                 return
         time.sleep(0.2)
+
+
+def _uvicorn_kwargs() -> dict:
+    # In PyInstaller --noconsole mode, stdout/stderr can be None. Uvicorn's
+    # default logging formatter expects a TTY-like stream and can crash when
+    # calling isatty() on None.
+    return {
+        "host": HOST,
+        "port": PORT,
+        "reload": False,
+        "log_level": "info",
+        "log_config": None,
+    }
 
 
 def main() -> None:
     root = _project_root()
     os.chdir(root)
 
-    url = "http://127.0.0.1:8000"
+    url = f"http://{HOST}:{PORT}"
     threading.Thread(target=_wait_and_open_browser, args=(url,), daemon=True).start()
 
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=False, log_level="info")
+    uvicorn.run("app.main:app", **_uvicorn_kwargs())
 
 
 if __name__ == "__main__":
