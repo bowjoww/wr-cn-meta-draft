@@ -121,6 +121,28 @@ def test_cn_cache_within_ttl_skips_network_fetch(monkeypatch):
 
 
 
+def test_meta_cn_response_includes_last_fetch(monkeypatch):
+    cached_items = [
+        {
+            "champion": "hero_10138",
+            "role": "top",
+            "tier": "diamond",
+            "winrate": 0.55,
+            "pickrate": 0.12,
+            "banrate": 0.33,
+        }
+    ]
+
+    monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: cached_items)
+    monkeypatch.setattr("app.main.read_cache", lambda: {"fetched_at": "2026-01-02T03:04:05+00:00"})
+
+    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "cn"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "cn_cache"
+    assert payload["last_fetch"] == "2026-01-02T03:04:05+00:00"
+
 def test_meta_name_lang_global_uses_global_champion_name(monkeypatch):
     cached_items = [
         {

@@ -4,7 +4,7 @@ import json
 import logging
 from math import sqrt
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -129,6 +129,13 @@ def _load_cn_with_cache(role: Role, tier: Tier) -> tuple[list[dict] | None, str 
     return rows, "cn_cache"
 
 
+def _cached_cn_last_fetch() -> str | None:
+    cache_payload = read_cache()
+    if not cache_payload:
+        return None
+    return cache_payload.get("fetched_at")
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC_INDEX_PATH)
@@ -148,12 +155,12 @@ def meta(
     view: View = "draft",
     sort: SortField | None = None,
     dir: SortDir = "desc",
-) -> dict[str, list[dict] | str]:
+) -> dict[str, Any]:
     sort_field: SortField = sort or ("draft_score" if view == "draft" else "power_score")
 
     if source == "sample":
         rows = _filter_and_score(_load_meta_data(), role=role, tier=tier, sort=sort_field, direction=dir)
-        return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample"}
+        return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample", "last_fetch": None}
 
     if source == "cn":
         try:
@@ -172,7 +179,11 @@ def meta(
                 preview,
             )
             rows = _filter_and_score(cn_rows, role=role, tier=tier, sort=sort_field, direction=dir)
-            return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": used_source or "cn_cache"}
+            return {
+                "items": _with_champion_lang(rows, name_lang=name_lang),
+                "source": used_source or "cn_cache",
+                "last_fetch": _cached_cn_last_fetch(),
+            }
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"CN source unavailable: {exc}") from exc
 
@@ -191,12 +202,16 @@ def meta(
                 preview,
             )
             rows = _filter_and_score(cn_rows, role=role, tier=tier, sort=sort_field, direction=dir)
-            return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": used_source or "cn_cache"}
+            return {
+                "items": _with_champion_lang(rows, name_lang=name_lang),
+                "source": used_source or "cn_cache",
+                "last_fetch": _cached_cn_last_fetch(),
+            }
     except Exception:
         pass
 
     rows = _filter_and_score(_load_meta_data(), role=role, tier=tier, sort=sort_field, direction=dir)
-    return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample"}
+    return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample", "last_fetch": None}
 
 
 @app.get("/meta/source")

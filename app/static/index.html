@@ -64,6 +64,7 @@
   <body>
     <h1>WR CN Meta Viewer</h1>
     <div id="sourceLabel" class="source-banner">Fonte: sample</div>
+    <div id="cnTimestamp" class="source-banner"></div>
 
     <div class="controls">
       <label>
@@ -122,6 +123,7 @@
       const rowsBody = document.getElementById("rows");
       const message = document.getElementById("message");
       const sourceLabel = document.getElementById("sourceLabel");
+      const cnTimestamp = document.getElementById("cnTimestamp");
       const tabDraft = document.getElementById("tabDraft");
       const tabPower = document.getElementById("tabPower");
       const scoreHeader = document.getElementById("scoreHeader");
@@ -184,12 +186,22 @@
         });
       }
 
+      function formatCnTimestamp(isoDate) {
+        if (!isoDate) return "";
+        const parsed = new Date(isoDate);
+        if (Number.isNaN(parsed.getTime())) {
+          return `Dados CN obtidos em: ${isoDate}`;
+        }
+        return `Dados CN obtidos em: ${parsed.toLocaleString("pt-BR")}`;
+      }
+
       async function refreshSourceLabel() {
         try {
           const response = await fetch("/meta/source");
           if (!response.ok) return;
           const data = await response.json();
           sourceLabel.textContent = `Fonte: ${data.source}`;
+          cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
         } catch (err) {
           // silent fallback
         }
@@ -223,10 +235,12 @@
           const data = await response.json();
           render(data.items);
           sourceLabel.textContent = `Fonte: ${data.source}`;
+          cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
           message.textContent = `Mostrando ${data.items.length} campeões · ordenado por ${labelForSort(state.sort)} (${state.dir})`;
         } catch (err) {
           rowsBody.innerHTML = "";
           message.textContent = err.message;
+          cnTimestamp.textContent = "";
           await refreshSourceLabel();
         }
       }
