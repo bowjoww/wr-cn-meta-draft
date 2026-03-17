@@ -6,6 +6,7 @@
   let champions = [];
   let champByName = {};
   let currentSubTab = "input";
+  let editingMatchId = null; // When set, saveMatch uses PUT instead of POST
 
   // ---- Open Series Teams ----
   // Open Series BR - Fase de Grupos
@@ -287,6 +288,7 @@
 
         <div class="form-row" style="margin-top:0.5rem">
           <button class="btn btn-primary" id="btnSaveMatch">Salvar Partida</button>
+          <button class="btn btn-danger" id="btnCancelEdit" style="display:none">Cancelar Edicao</button>
           <button class="btn btn-secondary" id="btnClearForm">Limpar</button>
         </div>
       </div>
@@ -318,6 +320,7 @@
     // Event listeners
     document.getElementById("btnSaveMatch").onclick = saveMatch;
     document.getElementById("btnClearForm").onclick = clearForm;
+    document.getElementById("btnCancelEdit").onclick = () => { clearForm(); showMessage("Edicao cancelada", "success"); };
 
     // Upload area
     const uploadArea = document.getElementById("uploadArea");
@@ -525,8 +528,13 @@
     }
 
     try {
-      const res = await fetch("/api/scrims/matches", {
-        method: "POST",
+      const url = editingMatchId
+        ? `/api/scrims/matches/${editingMatchId}`
+        : "/api/scrims/matches";
+      const method = editingMatchId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
@@ -535,7 +543,9 @@
         showMessage("Erro: " + (err.detail || res.statusText), "error");
         return;
       }
-      showMessage("Partida salva com sucesso!", "success");
+      showMessage(editingMatchId ? "Partida atualizada!" : "Partida salva com sucesso!", "success");
+      editingMatchId = null;
+      updateSaveButton();
       clearForm();
       loadMatchHistory();
     } catch (e) {
@@ -543,7 +553,17 @@
     }
   }
 
+  function updateSaveButton() {
+    const btn = document.getElementById("btnSaveMatch");
+    const cancelBtn = document.getElementById("btnCancelEdit");
+    if (!btn) return;
+    btn.textContent = editingMatchId ? "Atualizar Partida" : "Salvar Partida";
+    if (cancelBtn) cancelBtn.style.display = editingMatchId ? "" : "none";
+  }
+
   function clearForm() {
+    editingMatchId = null;
+    updateSaveButton();
     document.getElementById("fPatch").value = "";
     document.getElementById("fDate").value = new Date().toISOString().slice(0, 10);
     document.getElementById("fOpponentSelect").value = "";
@@ -606,6 +626,7 @@
             </span>
           </div>
           <div class="match-actions">
+            <button class="btn btn-secondary" onclick="window._scrimEditMatch(${m.id})">Editar</button>
             <button class="btn btn-danger" onclick="window._scrimDeleteMatch(${m.id})">Excluir</button>
           </div>
         </div>`
@@ -620,9 +641,95 @@
     if (!confirm("Excluir esta partida?")) return;
     try {
       await fetch(`/api/scrims/matches/${id}`, { method: "DELETE" });
+      if (editingMatchId === id) {
+        editingMatchId = null;
+        updateSaveButton();
+      }
       loadMatchHistory();
     } catch (e) {
       alert("Erro ao excluir");
+    }
+  };
+
+  window._scrimEditMatch = async function (id) {
+    try {
+      const res = await fetch(`/api/scrims/matches/${id}`);
+      if (!res.ok) { alert("Erro ao carregar partida"); return; }
+      const m = await res.json();
+
+      // Switch to Input tab
+      switchSubTab("input");
+
+      // Fill form fields
+      document.getElementById("fPatch").value = m.patch || "";
+      document.getElementById("fDate").value = m.date || "";
+      document.getElementById("fDuration").value = m.duration || "";
+      document.getElementById("fNotes").value = m.notes || "";
+
+      // Opponent
+      const oppSelect = document.getElementById("fOpponentSelect");
+      const oppOther = document.getElementById("fOpponentOther");
+      const optValues = Array.from(oppSelect.options).map(o => o.value);
+      if (optValues.includes(m.opponent)) {
+        oppSelect.value = m.opponent;
+        oppOther.style.display = "none";
+      } else {
+        oppSelect.value = "__other__";
+        oppOther.value = m.opponent;
+        oppOther.style.display = "";
+      }
+
+      // Side and result
+      document.getElementById(m.side === "blue" ? "sideBlue" : "sideRed").checked = true;
+      document.getElementById(m.result === "win" ? "resultWin" : "resultLoss").checked = true;
+
+      // Clear all player fields first
+      for (const team of ["our", "their"]) {
+        for (const role of ROLES) {
+          document.getElementById(`${team}_${role}_champ`).value = "";
+          document.getElementById(`${team}_${role}_k`).value = "0";
+          document.getElementById(`${team}_${role}_d`).value = "0";
+          document.getElementById(`${team}_${role}_a`).value = "0";
+          document.getElementById(`${team}_${role}_gold`).value = "";
+          document.getElementById(`${team}_${role}_pick`).value = "";
+          document.getElementById(`${team}_${role}_mvp`).checked = false;
+          document.getElementById(`${team}_${role}_svp`).checked = false;
+        }
+        for (let i = 1; i <= 5; i++) {
+          document.getElementById(`${team}Ban${i}`).value = "";
+        }
+      }
+
+      // Fill players
+      for (const p of (m.players || [])) {
+        const team = p.team === "ours" ? "our" : "their";
+        const champEl = document.getElementById(`${team}_${p.role}_champ`);
+        if (!champEl) continue;
+        champEl.value = p.champion || "";
+        champEl.dispatchEvent(new Event("blur"));
+        document.getElementById(`${team}_${p.role}_k`).value = p.kills || 0;
+        document.getElementById(`${team}_${p.role}_d`).value = p.deaths || 0;
+        document.getElementById(`${team}_${p.role}_a`).value = p.assists || 0;
+        if (p.gold_earned != null) document.getElementById(`${team}_${p.role}_gold`).value = p.gold_earned;
+        if (p.pick_order != null) document.getElementById(`${team}_${p.role}_pick`).value = p.pick_order;
+        document.getElementById(`${team}_${p.role}_mvp`).checked = !!p.is_mvp;
+        document.getElementById(`${team}_${p.role}_svp`).checked = !!p.is_svp;
+      }
+
+      // Fill bans
+      for (const b of (m.bans || [])) {
+        const team = b.team === "ours" ? "our" : "their";
+        const el = document.getElementById(`${team}Ban${b.ban_order}`);
+        if (el) el.value = b.champion || "";
+      }
+
+      // Set editing mode
+      editingMatchId = id;
+      updateSaveButton();
+      showMessage(`Editando partida #${id} — altere os campos e clique em Atualizar`, "success");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      alert("Erro ao carregar partida: " + e.message);
     }
   };
 
@@ -696,7 +803,10 @@
         const role = p.role;
         const champEl = document.getElementById(`${team}_${role}_champ`);
         if (champEl) {
-          champEl.value = p.champion || "";
+          // Clear placeholder names the AI writes when it can't identify
+          const name = p.champion || "";
+          const isPlaceholder = /^champion\s*(name)?$/i.test(name.trim()) || /^unknown$/i.test(name.trim());
+          champEl.value = isPlaceholder ? "" : name;
           champEl.dispatchEvent(new Event("blur"));
           document.getElementById(`${team}_${role}_k`).value = p.kills || 0;
           document.getElementById(`${team}_${role}_d`).value = p.deaths || 0;

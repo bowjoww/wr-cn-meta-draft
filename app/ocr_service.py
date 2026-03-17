@@ -43,14 +43,14 @@ Rules:
 - Player order top-to-bottom typically follows: Top, Jungle, Mid, Bot, Support
 - Extract kills, deaths, assists from the K/D/A columns
 - If you see damage stats, include them
-- Gold earned (Patrimônio Líquido) is the number shown next to each player's KDA
-- The MVP badge appears on the best player of the winning team; set is_mvp=true for that player
+- Gold earned: look for a number near each player (often labeled "Patrimônio Líquido", "Ouro Total", or just a plain number like 8945 or 11.7k). This is the total gold earned by that player. Convert "k" values to full numbers (e.g., 11.7k = 11700). Always return as an integer.
+- The MVP badge (crown/star icon) appears on the best player of the winning team; set is_mvp=true for that player
 - The SVP badge appears on the best player of the losing team; set is_svp=true for that player
-- Use English champion names (e.g., "Garen" not "盖伦")
+- Use English champion names (e.g., "Garen" not "盖伦"). If you cannot identify a champion, use null instead of a placeholder like "Champion Name"
 - If the screenshot says "VITÓRIA" (victory), the team shown prominently won
 - "Equipe Azul" = Blue Team, "Equipe Vermelha" = Red Team
 - Return ONLY the JSON, no markdown or extra text
-- If you cannot determine a field, use null
+- If you cannot determine a field, use null (do NOT guess or use placeholder text)
 """
 
 
