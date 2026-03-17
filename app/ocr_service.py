@@ -1,0 +1,126 @@
+"""OCR service using OpenAI Vision API to extract match data from Wild Rift screenshots."""
+
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import os
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+EXTRACTION_PROMPT_TEMPLATE = """You are analyzing Wild Rift (League of Legends: Wild Rift) post-game screenshots.
+This screenshot is from SPECTATOR PERSPECTIVE, so it does NOT indicate which team belongs to the user.
+{our_side_instruction}
+
+Extract the match data and return ONLY valid JSON with this structure:
+
+{{
+  "side": "blue" or "red" (which side OUR team is on),
+  "result": "win" or "loss" (result from OUR team's perspective),
+  "duration": "MM:SS" (game duration if visible),
+  "players": [
+    {{
+      "role": "top"|"jungle"|"mid"|"bot"|"support",
+      "team": "ours"|"theirs",
+      "champion": "Champion Name",
+      "kills": 0,
+      "deaths": 0,
+      "assists": 0,
+      "kp_percent": null,
+      "damage_dealt": null,
+      "damage_taken": null,
+      "gold_earned": null,
+      "is_mvp": false,
+      "is_svp": false
+    }}
+  ]
+}}
+
+Rules:
+- The BLUE team is always on the LEFT side of the scoreboard, RED team on the RIGHT
+- Player order top-to-bottom typically follows: Top, Jungle, Mid, Bot, Support
+- Extract kills, deaths, assists from the K/D/A columns
+- If you see damage stats, include them
+- Gold earned (Patrimônio Líquido) is the number shown next to each player's KDA
+- The MVP badge appears on the best player of the winning team; set is_mvp=true for that player
+- The SVP badge appears on the best player of the losing team; set is_svp=true for that player
+- Use English champion names (e.g., "Garen" not "盖伦")
+- If the screenshot says "VITÓRIA" (victory), the team shown prominently won
+- "Equipe Azul" = Blue Team, "Equipe Vermelha" = Red Team
+- Return ONLY the JSON, no markdown or extra text
+- If you cannot determine a field, use null
+"""
+
+
+def extract_match_data(images: list[dict[str, Any]], our_side: str | None = None) -> dict[str, Any]:
+    """Extract match data from screenshot images using OpenAI Vision API.
+
+    Args:
+        images: List of dicts with 'data' (bytes) and 'content_type' (str).
+        our_side: "blue" or "red" - which side the user's team is on.
+
+    Returns:
+        Parsed match data dict.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY environment variable not set")
+
+    if our_side:
+        side_instruction = (
+            f'The user has indicated that THEIR team is the {our_side.upper()} side '
+            f'({"LEFT" if our_side == "blue" else "RIGHT"} side of the scoreboard). '
+            f'Players on the {our_side} side should have team="ours", '
+            f'players on the other side should have team="theirs". '
+            f'Set "side" to "{our_side}".'
+        )
+    else:
+        side_instruction = (
+            "The user did NOT specify which team is theirs. "
+            "Try to determine from context (victory/defeat banner), "
+            "but if unclear, assign the blue (left) team as 'ours'."
+        )
+
+    prompt = EXTRACTION_PROMPT_TEMPLATE.format(our_side_instruction=side_instruction)
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key)
+
+    content: list[dict] = [{"type": "text", "text": prompt}]
+
+    for img in images:
+        b64 = base64.b64encode(img["data"]).decode("utf-8")
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{img['content_type']};base64,{b64}",
+                "detail": "high",
+            },
+        })
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": content}],
+        max_tokens=2000,
+        temperature=0,
+    )
+
+    raw = response.choices[0].message.content.strip()
+
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        # Remove first and last lines (```json and ```)
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        raw = "\n".join(lines)
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse OCR response: %s", raw[:500])
+        raise RuntimeError(f"Could not parse OCR response as JSON: {exc}") from exc
+
+    return data

@@ -1,0 +1,1048 @@
+/* ===== Scrim Tracker JS ===== */
+(function () {
+  "use strict";
+
+  const ROLES = ["top", "jungle", "mid", "bot", "support"];
+  let champions = [];
+  let champByName = {};
+  let currentSubTab = "input";
+
+  // ---- Open Series Teams ----
+  // Open Series BR - Fase de Grupos
+  const OPEN_SERIES_TEAMS = [
+    // Grupo A
+    "RMD E-SPORTS","Minerva UFRJ","Team Golden Wind","NFG POROS",
+    // Grupo B
+    "All Next","Genei ryodan Gaming","Goatz CN","Prime",
+    // Grupo C
+    "Goatz Galaxy","Tudo Passa","MonkeyTeam","Valhalla Ragnarok",
+    // Grupo D
+    "Pegasus","Sarapathongos","Dragões da Laguna","THC Atomic",
+    // Grupo E
+    "Os Cansados","Custa Nada","NFG FÊNIX","NFG Boys",
+    // Grupo F
+    "THC Thunderlords","Duck Team","Invictus Team","Valhalla Team",
+    // Grupo G
+    "Fui sem TP","AREMESSANDO ALTO","FalconFury","Synergy",
+    // Grupo H
+    "Hiro FLQ Esports","NEXT Gaming","Inimigos do Walski","NFG LINDOS",
+  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  // ---- Init ----
+  async function initScrim() {
+    await loadChampions();
+    renderSubTabs();
+    renderInputTab();
+    loadMatchHistory();
+  }
+
+  // Display name aliases (internal API name -> display name)
+  const CHAMP_ALIASES = {"monkeyking": "wukong"};
+
+  async function loadChampions() {
+    try {
+      const res = await fetch("/api/champions");
+      if (res.ok) {
+        champions = await res.json();
+        champByName = {};
+        for (const c of champions) {
+          champByName[c.name.toLowerCase()] = c;
+          if (c.name_cn) champByName[c.name_cn.toLowerCase()] = c;
+        }
+        // Register aliases so DB names also resolve
+        for (const [alias, canonical] of Object.entries(CHAMP_ALIASES)) {
+          if (champByName[canonical] && !champByName[alias]) {
+            champByName[alias] = champByName[canonical];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load champions", e);
+    }
+  }
+
+  function getChampAvatar(name) {
+    if (!name) return "";
+    const c = champByName[name.toLowerCase()];
+    return c ? c.avatar_url || "" : "";
+  }
+
+  function champAvatarHtml(name, size) {
+    size = size || 24;
+    const url = getChampAvatar(name);
+    if (url) {
+      return `<img src="${url}" alt="${escHtml(name)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;background:#e5e7eb;flex-shrink:0" onerror="this.style.display='none'">`;
+    }
+    const letter = name ? name[0].toUpperCase() : "?";
+    return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:#2d6cdf;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size * 0.45)}px;flex-shrink:0">${letter}</span>`;
+  }
+
+  // ---- Custom champion picker (replaces datalist) ----
+  function createChampPicker(inputId) {
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "position:relative;display:inline-block";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = inputId;
+    input.placeholder = "Champion";
+    input.autocomplete = "off";
+    input.style.cssText = "width:140px;min-width:100px;padding:0.3rem 0.5rem 0.3rem 28px;border:1px solid #ccc;border-radius:4px;font-size:0.85rem";
+
+    const avatarPreview = document.createElement("span");
+    avatarPreview.style.cssText = "position:absolute;left:4px;top:50%;transform:translateY(-50%);pointer-events:none";
+    avatarPreview.className = "champ-preview";
+
+    const dropdown = document.createElement("div");
+    dropdown.style.cssText = "position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;display:none";
+
+    function updatePreview() {
+      const val = input.value.trim();
+      if (val && champByName[val.toLowerCase()]) {
+        avatarPreview.innerHTML = champAvatarHtml(val, 20);
+      } else {
+        avatarPreview.innerHTML = "";
+        input.style.paddingLeft = "0.5rem";
+        return;
+      }
+      input.style.paddingLeft = "28px";
+    }
+
+    function showDropdown(filter) {
+      const q = (filter || "").toLowerCase();
+      const matches = champions.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          (c.name_cn && c.name_cn.toLowerCase().includes(q))
+      ).slice(0, 20);
+
+      if (!matches.length) {
+        dropdown.style.display = "none";
+        return;
+      }
+
+      dropdown.innerHTML = matches
+        .map(
+          (c) =>
+            `<div class="champ-option" data-name="${escHtml(c.name)}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f0f0f0">
+              ${c.avatar_url ? `<img src="${c.avatar_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">` : ""}
+              <span>${escHtml(c.name)}</span>
+            </div>`
+        )
+        .join("");
+      dropdown.style.display = "block";
+
+      dropdown.querySelectorAll(".champ-option").forEach((opt) => {
+        opt.onmousedown = (e) => {
+          e.preventDefault();
+          input.value = opt.dataset.name;
+          dropdown.style.display = "none";
+          updatePreview();
+        };
+        opt.onmouseenter = () => (opt.style.background = "#f0f4ff");
+        opt.onmouseleave = () => (opt.style.background = "");
+      });
+    }
+
+    input.oninput = () => {
+      showDropdown(input.value);
+      updatePreview();
+    };
+    input.onfocus = () => {
+      if (input.value) showDropdown(input.value);
+      else showDropdown("");
+    };
+    input.onblur = () => {
+      setTimeout(() => (dropdown.style.display = "none"), 150);
+      updatePreview();
+    };
+
+    wrapper.appendChild(avatarPreview);
+    wrapper.appendChild(input);
+    wrapper.appendChild(dropdown);
+    return wrapper;
+  }
+
+  // ---- Sub-tab navigation ----
+  function renderSubTabs() {
+    const container = document.getElementById("scrimSubTabs");
+    if (!container) return;
+    container.innerHTML = "";
+    const tabs = [
+      { id: "input", label: "Input" },
+      { id: "stats", label: "Stats" },
+      { id: "champions", label: "Champions" },
+      { id: "matchups", label: "Matchups" },
+      { id: "duos", label: "Duos" },
+      { id: "pickorder", label: "Pick Order" },
+    ];
+    tabs.forEach((t) => {
+      const btn = document.createElement("button");
+      btn.className = "scrim-tab" + (t.id === currentSubTab ? " active" : "");
+      btn.textContent = t.label;
+      btn.onclick = () => switchSubTab(t.id);
+      container.appendChild(btn);
+    });
+  }
+
+  function switchSubTab(tabId) {
+    currentSubTab = tabId;
+    renderSubTabs();
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = "";
+    if (tabId === "input") renderInputTab();
+    else if (tabId === "stats") renderStatsTab();
+    else if (tabId === "champions") renderChampionsTab();
+    else if (tabId === "matchups") renderMatchupsTab();
+    else if (tabId === "duos") renderDuosTab();
+    else if (tabId === "pickorder") renderPickOrderTab();
+  }
+
+  // ================================================================
+  // INPUT TAB
+  // ================================================================
+  function renderInputTab() {
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = `
+      <div class="scrim-form">
+        <div id="scrimMessage"></div>
+
+        <!-- Screenshot Upload -->
+        <div class="upload-area" id="uploadArea">
+          <p><strong>Upload screenshots</strong></p>
+          <p>Arraste, clique ou cole (CTRL+V) screenshots pos-jogo</p>
+          <div style="margin:0.5rem 0">
+            <span style="font-weight:600;font-size:0.85rem;color:#555">Meu time na screenshot:</span>
+            <div class="side-selector" style="margin-left:0.5rem;display:inline-flex">
+              <input type="radio" name="ocrSide" id="ocrSideBlue" value="blue">
+              <label for="ocrSideBlue">Blue (Esquerda)</label>
+              <input type="radio" name="ocrSide" id="ocrSideRed" value="red">
+              <label for="ocrSideRed">Red (Direita)</label>
+            </div>
+            <div id="ocrSideWarning" style="color:#ef4444;font-size:0.8rem;margin-top:0.25rem;display:none">Selecione o lado do seu time antes de enviar a screenshot!</div>
+          </div>
+          <input type="file" id="screenshotInput" multiple accept="image/*" style="display:none">
+          <div id="ocrStatus"></div>
+        </div>
+
+        <!-- Match info -->
+        <div class="form-row">
+          <label>Patch <input type="text" id="fPatch" placeholder="5.1a"></label>
+          <label>Data <input type="date" id="fDate"></label>
+          <label>Adversario
+            <div style="display:flex;gap:0.25rem;align-items:center">
+              <select id="fOpponentSelect" style="min-width:160px">
+                <option value="">-- Selecionar --</option>
+                <option value="__other__">Outro (digitar)</option>
+                ${OPEN_SERIES_TEAMS.filter(t => t !== "Fui sem TP").map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join("")}
+              </select>
+              <input type="text" id="fOpponentOther" placeholder="Nome do time" style="display:none;width:140px">
+            </div>
+          </label>
+          <label>Duracao <input type="text" id="fDuration" placeholder="16:00"></label>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <span style="font-weight:600;font-size:0.85rem;margin-right:0.5rem">Lado:</span>
+            <div class="side-selector">
+              <input type="radio" name="side" id="sideBlue" value="blue" checked>
+              <label for="sideBlue">Blue</label>
+              <input type="radio" name="side" id="sideRed" value="red">
+              <label for="sideRed">Red</label>
+            </div>
+          </div>
+          <div>
+            <span style="font-weight:600;font-size:0.85rem;margin-right:0.5rem">Resultado:</span>
+            <div class="side-selector result-selector">
+              <input type="radio" name="result" id="resultWin" value="win" checked>
+              <label for="resultWin">Win</label>
+              <input type="radio" name="result" id="resultLoss" value="loss">
+              <label for="resultLoss">Loss</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Our players -->
+        <div class="players-section" id="ourPlayersSection">
+          <h3>Nosso Time</h3>
+        </div>
+
+        <!-- Their players -->
+        <div class="players-section" id="theirPlayersSection">
+          <h3>Time Adversario</h3>
+        </div>
+
+        <!-- Bans -->
+        <div class="bans-section" id="bansSection">
+          <h3>Bans</h3>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-row">
+          <label style="width:100%">Notas
+            <textarea id="fNotes" rows="2" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-size:0.9rem" placeholder="Observacoes sobre a partida..."></textarea>
+          </label>
+        </div>
+
+        <div class="form-row" style="margin-top:0.5rem">
+          <button class="btn btn-primary" id="btnSaveMatch">Salvar Partida</button>
+          <button class="btn btn-secondary" id="btnClearForm">Limpar</button>
+        </div>
+      </div>
+
+      <div class="match-list" id="matchList">
+        <h3>Historico de Partidas</h3>
+        <div id="matchListBody"></div>
+      </div>
+    `;
+
+    // Build player rows with custom champion pickers
+    buildPlayerRows("ourPlayersSection", "our");
+    buildPlayerRows("theirPlayersSection", "their");
+    buildBanRows();
+
+    // Set today's date
+    document.getElementById("fDate").value = new Date()
+      .toISOString()
+      .slice(0, 10);
+
+    // Opponent select toggle
+    const oppSelect = document.getElementById("fOpponentSelect");
+    const oppOther = document.getElementById("fOpponentOther");
+    oppSelect.onchange = () => {
+      oppOther.style.display = oppSelect.value === "__other__" ? "" : "none";
+      if (oppSelect.value !== "__other__") oppOther.value = "";
+    };
+
+    // Event listeners
+    document.getElementById("btnSaveMatch").onclick = saveMatch;
+    document.getElementById("btnClearForm").onclick = clearForm;
+
+    // Upload area
+    const uploadArea = document.getElementById("uploadArea");
+    const fileInput = document.getElementById("screenshotInput");
+    uploadArea.addEventListener("click", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "LABEL") return;
+      fileInput.click();
+    });
+    fileInput.onchange = handleScreenshots;
+    uploadArea.ondragover = (e) => {
+      e.preventDefault();
+      uploadArea.classList.add("dragover");
+    };
+    uploadArea.ondragleave = () => uploadArea.classList.remove("dragover");
+    uploadArea.ondrop = (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove("dragover");
+      if (e.dataTransfer.files.length) {
+        handleScreenshotFiles(e.dataTransfer.files);
+      }
+    };
+
+    // Clipboard paste (CTRL+V)
+    document.addEventListener("paste", handlePaste);
+  }
+
+  function handlePaste(e) {
+    if (!document.getElementById("uploadArea")) return; // only on input tab
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const files = [];
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      handleScreenshotFiles(files);
+    }
+  }
+
+  function buildPlayerRows(sectionId, teamPrefix) {
+    const section = document.getElementById(sectionId);
+    for (const r of ROLES) {
+      const row = document.createElement("div");
+      row.className = "player-row";
+
+      const roleLabel = document.createElement("span");
+      roleLabel.className = "role-label";
+      roleLabel.textContent = r;
+      row.appendChild(roleLabel);
+
+      const picker = createChampPicker(`${teamPrefix}_${r}_champ`);
+      row.appendChild(picker);
+
+      for (const [suffix, placeholder, title] of [
+        ["k", "K", "Kills"],
+        ["d", "D", "Deaths"],
+        ["a", "A", "Assists"],
+        ["gold", "Gold", "Gold Earned"],
+        ["pick", "P#", "Pick Order"],
+      ]) {
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.id = `${teamPrefix}_${r}_${suffix}`;
+        inp.min = "0";
+        inp.placeholder = placeholder;
+        inp.title = title;
+        if (suffix === "k" || suffix === "d" || suffix === "a") inp.value = "0";
+        if (suffix === "pick") { inp.min = "1"; inp.max = "5"; }
+        if (suffix === "gold") inp.style.width = "70px";
+        row.appendChild(inp);
+      }
+
+      // MVP/SVP checkboxes
+      for (const [suffix, label, title] of [
+        ["mvp", "MVP", "Most Valuable Player"],
+        ["svp", "SVP", "Super Valuable Player (losing team)"],
+      ]) {
+        const lbl = document.createElement("label");
+        lbl.style.cssText = "display:flex;align-items:center;gap:2px;font-size:0.75rem;cursor:pointer";
+        lbl.title = title;
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.id = `${teamPrefix}_${r}_${suffix}`;
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(label));
+        row.appendChild(lbl);
+      }
+
+      section.appendChild(row);
+    }
+  }
+
+  function buildBanRows() {
+    const section = document.getElementById("bansSection");
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "display:flex;gap:2rem;flex-wrap:wrap";
+
+    for (const [teamLabel, prefix] of [["Nossos Bans", "our"], ["Bans Adversarios", "their"]]) {
+      const col = document.createElement("div");
+      const title = document.createElement("strong");
+      title.style.fontSize = "0.85rem";
+      title.textContent = teamLabel;
+      col.appendChild(title);
+
+      for (let i = 1; i <= 5; i++) {
+        const row = document.createElement("div");
+        row.className = "bans-row";
+        const num = document.createElement("span");
+        num.style.cssText = "font-size:0.75rem;width:20px";
+        num.textContent = `${i}.`;
+        row.appendChild(num);
+        row.appendChild(createChampPicker(`${prefix}Ban${i}`));
+        col.appendChild(row);
+      }
+      wrapper.appendChild(col);
+    }
+    section.appendChild(wrapper);
+  }
+
+  function computeKP(players) {
+    // Auto-calculate KP% for each team
+    const teamKills = { ours: 0, theirs: 0 };
+    for (const p of players) {
+      teamKills[p.team] = (teamKills[p.team] || 0) + p.kills;
+    }
+    for (const p of players) {
+      const total = teamKills[p.team] || 0;
+      p.kp_percent = total > 0 ? Math.round(((p.kills + p.assists) / total) * 1000) / 10 : 0;
+    }
+  }
+
+  function collectFormData() {
+    const side = document.querySelector('input[name="side"]:checked').value;
+    const result = document.querySelector('input[name="result"]:checked').value;
+
+    // Get opponent from select or other input
+    const oppSelect = document.getElementById("fOpponentSelect");
+    let opponent = "";
+    if (oppSelect.value === "__other__") {
+      opponent = document.getElementById("fOpponentOther").value.trim();
+    } else {
+      opponent = oppSelect.value;
+    }
+
+    const players = [];
+    for (const team of ["our", "their"]) {
+      const teamVal = team === "our" ? "ours" : "theirs";
+      for (const role of ROLES) {
+        const champ = document.getElementById(`${team}_${role}_champ`).value.trim();
+        if (!champ) continue;
+        const p = {
+          role,
+          team: teamVal,
+          champion: champ,
+          kills: parseInt(document.getElementById(`${team}_${role}_k`).value) || 0,
+          deaths: parseInt(document.getElementById(`${team}_${role}_d`).value) || 0,
+          assists: parseInt(document.getElementById(`${team}_${role}_a`).value) || 0,
+          is_mvp: document.getElementById(`${team}_${role}_mvp`).checked,
+          is_svp: document.getElementById(`${team}_${role}_svp`).checked,
+        };
+        const gold = document.getElementById(`${team}_${role}_gold`).value;
+        if (gold) p.gold_earned = parseFloat(gold);
+        const pick = document.getElementById(`${team}_${role}_pick`).value;
+        if (pick) p.pick_order = parseInt(pick);
+        players.push(p);
+      }
+    }
+
+    // Auto-calculate KP%
+    computeKP(players);
+
+    const bans = [];
+    for (const team of ["our", "their"]) {
+      const teamVal = team === "our" ? "ours" : "theirs";
+      for (let i = 1; i <= 5; i++) {
+        const champ = document.getElementById(`${team}Ban${i}`).value.trim();
+        if (champ) {
+          bans.push({ champion: champ, team: teamVal, ban_order: i });
+        }
+      }
+    }
+
+    return {
+      patch: document.getElementById("fPatch").value.trim(),
+      date: document.getElementById("fDate").value,
+      opponent,
+      side,
+      result,
+      duration: document.getElementById("fDuration").value.trim() || null,
+      notes: document.getElementById("fNotes").value.trim() || null,
+      players,
+      bans,
+    };
+  }
+
+  async function saveMatch() {
+    const data = collectFormData();
+    if (!data.patch || !data.date || !data.opponent) {
+      showMessage("Preencha patch, data e adversario", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/scrims/matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showMessage("Erro: " + (err.detail || res.statusText), "error");
+        return;
+      }
+      showMessage("Partida salva com sucesso!", "success");
+      clearForm();
+      loadMatchHistory();
+    } catch (e) {
+      showMessage("Erro ao salvar: " + e.message, "error");
+    }
+  }
+
+  function clearForm() {
+    document.getElementById("fPatch").value = "";
+    document.getElementById("fDate").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("fOpponentSelect").value = "";
+    document.getElementById("fOpponentOther").value = "";
+    document.getElementById("fOpponentOther").style.display = "none";
+    document.getElementById("fDuration").value = "";
+    document.getElementById("fNotes").value = "";
+    document.getElementById("sideBlue").checked = true;
+    document.getElementById("resultWin").checked = true;
+
+    for (const team of ["our", "their"]) {
+      for (const role of ROLES) {
+        document.getElementById(`${team}_${role}_champ`).value = "";
+        document.getElementById(`${team}_${role}_k`).value = "0";
+        document.getElementById(`${team}_${role}_d`).value = "0";
+        document.getElementById(`${team}_${role}_a`).value = "0";
+        document.getElementById(`${team}_${role}_gold`).value = "";
+        document.getElementById(`${team}_${role}_pick`).value = "";
+        document.getElementById(`${team}_${role}_mvp`).checked = false;
+        document.getElementById(`${team}_${role}_svp`).checked = false;
+        const preview = document.getElementById(`${team}_${role}_champ`)?.closest("div")?.querySelector(".champ-preview");
+        if (preview) preview.innerHTML = "";
+      }
+      for (let i = 1; i <= 5; i++) {
+        document.getElementById(`${team}Ban${i}`).value = "";
+      }
+    }
+  }
+
+  async function loadMatchHistory() {
+    const body = document.getElementById("matchListBody");
+    if (!body) return;
+
+    try {
+      const res = await fetch("/api/scrims/matches");
+      if (!res.ok) return;
+      const matches = await res.json();
+
+      if (!matches.length) {
+        body.innerHTML = '<p style="color:#999;font-size:0.85rem">Nenhuma partida registrada ainda.</p>';
+        return;
+      }
+
+      body.innerHTML = matches
+        .map(
+          (m) => `
+        <div class="match-card ${m.result}">
+          <div class="match-info">
+            <span class="result-badge ${m.result}">${m.result === "win" ? "W" : "L"}</span>
+            <span><strong>vs ${escHtml(m.opponent)}</strong></span>
+            <span>${m.date}</span>
+            <span>Patch ${escHtml(m.patch)}</span>
+            <span style="text-transform:capitalize">${m.side}</span>
+            ${m.duration ? `<span>${escHtml(m.duration)}</span>` : ""}
+            <span style="display:flex;gap:4px;align-items:center">
+              ${(m.players || [])
+                .filter((p) => p.team === "ours")
+                .map((p) => champAvatarHtml(p.champion, 22))
+                .join("")}
+            </span>
+          </div>
+          <div class="match-actions">
+            <button class="btn btn-danger" onclick="window._scrimDeleteMatch(${m.id})">Excluir</button>
+          </div>
+        </div>`
+        )
+        .join("");
+    } catch (e) {
+      body.innerHTML = '<p style="color:#c00">Erro ao carregar partidas</p>';
+    }
+  }
+
+  window._scrimDeleteMatch = async function (id) {
+    if (!confirm("Excluir esta partida?")) return;
+    try {
+      await fetch(`/api/scrims/matches/${id}`, { method: "DELETE" });
+      loadMatchHistory();
+    } catch (e) {
+      alert("Erro ao excluir");
+    }
+  };
+
+  // ---- Screenshot OCR ----
+  function handleScreenshots(e) {
+    handleScreenshotFiles(e.target.files);
+  }
+
+  async function handleScreenshotFiles(files) {
+    if (!files.length) return;
+
+    const ocrSide = document.querySelector('input[name="ocrSide"]:checked');
+    if (!ocrSide) {
+      const warn = document.getElementById("ocrSideWarning");
+      if (warn) warn.style.display = "block";
+      showMessage("Selecione Blue ou Red antes de enviar a screenshot!", "error");
+      return;
+    }
+    const warnEl = document.getElementById("ocrSideWarning");
+    if (warnEl) warnEl.style.display = "none";
+
+    const status = document.getElementById("ocrStatus");
+    status.innerHTML = '<span class="spinner"></span> Processando screenshots...';
+
+    const formData = new FormData();
+    for (const f of files) {
+      formData.append("files", f);
+    }
+    formData.append("our_side", ocrSide.value);
+
+    try {
+      const res = await fetch("/api/scrims/ocr", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.status === 501) {
+        status.innerHTML =
+          '<span style="color:#c00">OCR nao disponivel. Configure OPENAI_API_KEY.</span>';
+        return;
+      }
+
+      if (!res.ok) {
+        const err = await res.json();
+        status.innerHTML = `<span style="color:#c00">OCR falhou: ${escHtml(err.detail || "erro")}</span>`;
+        return;
+      }
+
+      const data = await res.json();
+      status.innerHTML = '<span style="color:#166534">Dados extraidos! Revise e salve.</span>';
+      fillFormFromOCR(data);
+    } catch (e) {
+      status.innerHTML = `<span style="color:#c00">Erro: ${escHtml(e.message)}</span>`;
+    }
+  }
+
+  function fillFormFromOCR(data) {
+    if (data.side) {
+      document.getElementById(data.side === "blue" ? "sideBlue" : "sideRed").checked = true;
+    }
+    if (data.result) {
+      document.getElementById(data.result === "win" ? "resultWin" : "resultLoss").checked = true;
+    }
+    if (data.duration) {
+      document.getElementById("fDuration").value = data.duration;
+    }
+
+    if (data.players) {
+      for (const p of data.players) {
+        const team = p.team === "ours" ? "our" : "their";
+        const role = p.role;
+        const champEl = document.getElementById(`${team}_${role}_champ`);
+        if (champEl) {
+          champEl.value = p.champion || "";
+          champEl.dispatchEvent(new Event("blur"));
+          document.getElementById(`${team}_${role}_k`).value = p.kills || 0;
+          document.getElementById(`${team}_${role}_d`).value = p.deaths || 0;
+          document.getElementById(`${team}_${role}_a`).value = p.assists || 0;
+          if (p.gold_earned != null) {
+            document.getElementById(`${team}_${role}_gold`).value = p.gold_earned;
+          }
+          if (p.is_mvp) {
+            document.getElementById(`${team}_${role}_mvp`).checked = true;
+          }
+          if (p.is_svp) {
+            document.getElementById(`${team}_${role}_svp`).checked = true;
+          }
+        }
+      }
+    }
+  }
+
+  // ================================================================
+  // Shared filter builder
+  // ================================================================
+  function buildFilterParams(prefix) {
+    const params = new URLSearchParams();
+    const opp = document.getElementById(`${prefix}Opponent`).value;
+    const df = document.getElementById(`${prefix}DateFrom`).value;
+    const dt = document.getElementById(`${prefix}DateTo`).value;
+    const patch = document.getElementById(`${prefix}Patch`).value;
+    if (opp) params.set("opponent", opp);
+    if (df) params.set("date_from", df);
+    if (dt) params.set("date_to", dt);
+    if (patch) params.set("patch", patch);
+    return params;
+  }
+
+  function filtersBarHtml(prefix) {
+    return `
+      <div class="filters-bar" id="${prefix}Filters">
+        <label>Adversario <select id="${prefix}Opponent"><option value="">Todos</option></select></label>
+        <label>De <input type="date" id="${prefix}DateFrom"></label>
+        <label>Ate <input type="date" id="${prefix}DateTo"></label>
+        <label>Patch <select id="${prefix}Patch"><option value="">Todos</option></select></label>
+        <button class="btn btn-primary" id="${prefix}Btn">Filtrar</button>
+      </div>
+    `;
+  }
+
+  async function populateFilters(prefix) {
+    try {
+      const res = await fetch("/api/scrims/filters");
+      if (!res.ok) return;
+      const f = await res.json();
+      const oppSel = document.getElementById(`${prefix}Opponent`);
+      f.opponents.forEach((o) => {
+        const opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        oppSel.appendChild(opt);
+      });
+      const patchSel = document.getElementById(`${prefix}Patch`);
+      f.patches.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p;
+        patchSel.appendChild(opt);
+      });
+    } catch (e) {}
+  }
+
+  // ================================================================
+  // STATS TAB
+  // ================================================================
+  async function renderStatsTab() {
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = filtersBarHtml("sf") + '<div id="statsBody"><p style="color:#999">Carregando...</p></div>';
+    await populateFilters("sf");
+    document.getElementById("sfBtn").onclick = loadStats;
+    loadStats();
+  }
+
+  async function loadStats() {
+    const params = buildFilterParams("sf");
+    const body = document.getElementById("statsBody");
+    try {
+      const res = await fetch("/api/scrims/stats?" + params.toString());
+      if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
+      const data = await res.json();
+      renderStatsBody(data, body);
+    } catch (e) {
+      body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
+    }
+  }
+
+  function renderStatsBody(data, container) {
+    const ov = data.overall || {};
+    const roles = data.roles || {};
+
+    let html = `
+      <div class="overall-banner">
+        <div class="overall-stat">
+          <div class="number">${ov.total_games || 0}</div>
+          <div class="label">Partidas</div>
+        </div>
+        <div class="overall-stat">
+          <div class="number">${ov.total_wins || 0}</div>
+          <div class="label">Vitorias</div>
+        </div>
+        <div class="overall-stat">
+          <div class="number">${ov.winrate || 0}%</div>
+          <div class="label">Winrate</div>
+        </div>
+      </div>
+    `;
+
+    html += '<div class="stats-grid">';
+    for (const role of ROLES) {
+      const roleData = roles[role] || [];
+      html += `
+        <div class="stat-card">
+          <h3 style="text-transform:capitalize">${role}</h3>
+          ${
+            roleData.length
+              ? roleData
+                  .slice(0, 5)
+                  .map(
+                    (c) => `
+                  <div class="stat-row" style="display:flex;align-items:center;gap:6px">
+                    ${champAvatarHtml(c.champion, 22)}
+                    <span style="flex:1">${escHtml(c.champion)} <small>(${c.games}g)</small></span>
+                    <span class="value">${c.winrate}% WR | ${c.kda} KDA</span>
+                  </div>`
+                  )
+                  .join("")
+              : '<p style="color:#999;font-size:0.8rem">Sem dados</p>'
+          }
+        </div>
+      `;
+    }
+    html += "</div>";
+    container.innerHTML = html;
+  }
+
+  // ================================================================
+  // CHAMPIONS TAB
+  // ================================================================
+  async function renderChampionsTab() {
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = filtersBarHtml("cf") + '<div id="champsBody"><p style="color:#999">Carregando...</p></div>';
+    await populateFilters("cf");
+    document.getElementById("cfBtn").onclick = loadChampionStats;
+    loadChampionStats();
+  }
+
+  async function loadChampionStats() {
+    const params = buildFilterParams("cf");
+    const body = document.getElementById("champsBody");
+    try {
+      const res = await fetch("/api/scrims/champion-stats?" + params.toString());
+      if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar champion stats</p>'; return; }
+      const data = await res.json();
+      renderChampionTable(data, body);
+    } catch (e) {
+      body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
+    }
+  }
+
+  function renderChampionTable(data, container) {
+    if (!data.length) {
+      container.innerHTML = '<p style="color:#999">Nenhum dado de campeao ainda.</p>';
+      return;
+    }
+
+    let html = `
+      <table class="champ-table">
+        <thead>
+          <tr>
+            <th>Champion</th>
+            <th>Games</th>
+            <th>Presence%</th>
+            <th>WR%</th>
+            <th>Our Picks</th>
+            <th>Their Picks</th>
+            <th>Our Bans</th>
+            <th>Their Bans</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const c of data) {
+      html += `
+        <tr>
+          <td><div style="display:flex;align-items:center;gap:6px">${champAvatarHtml(c.champion, 24)}<strong>${escHtml(c.champion)}</strong></div></td>
+          <td>${c.total_games}</td>
+          <td>${c.presence}%</td>
+          <td>${c.winrate}%</td>
+          <td>${c.our_picks}</td>
+          <td>${c.their_picks}</td>
+          <td>${c.our_bans}</td>
+          <td>${c.their_bans}</td>
+        </tr>
+      `;
+    }
+
+    html += "</tbody></table>";
+    container.innerHTML = html;
+  }
+
+  // ================================================================
+  // MATCHUPS TAB
+  // ================================================================
+  async function renderMatchupsTab() {
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = filtersBarHtml("mf") + '<div id="matchupsBody"><p style="color:#999">Carregando...</p></div>';
+    await populateFilters("mf");
+    document.getElementById("mfBtn").onclick = loadMatchups;
+    loadMatchups();
+  }
+
+  async function loadMatchups() {
+    const params = buildFilterParams("mf");
+    const body = document.getElementById("matchupsBody");
+    try {
+      const res = await fetch("/api/scrims/matchups?" + params.toString());
+      if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
+      const data = await res.json();
+      if (!data.length) { body.innerHTML = '<p style="color:#999">Sem dados de matchup.</p>'; return; }
+
+      let html = `<table class="champ-table"><thead><tr>
+        <th>Role</th><th>Nosso Champ</th><th>vs</th><th>Champ Deles</th><th>Games</th><th>W</th><th>L</th><th>WR%</th>
+      </tr></thead><tbody>`;
+      for (const m of data) {
+        html += `<tr>
+          <td style="text-transform:capitalize">${m.role}</td>
+          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(m.our_champion, 20)} ${escHtml(m.our_champion)}</div></td>
+          <td>vs</td>
+          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(m.their_champion, 20)} ${escHtml(m.their_champion)}</div></td>
+          <td>${m.games}</td><td>${m.wins}</td><td>${m.losses}</td>
+          <td style="font-weight:600;color:${m.winrate >= 50 ? '#16a34a' : '#dc2626'}">${m.winrate}%</td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+      body.innerHTML = html;
+    } catch (e) {
+      body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
+    }
+  }
+
+  // ================================================================
+  // DUOS TAB
+  // ================================================================
+  async function renderDuosTab() {
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = filtersBarHtml("df") + '<div id="duosBody"><p style="color:#999">Carregando...</p></div>';
+    await populateFilters("df");
+    document.getElementById("dfBtn").onclick = loadDuos;
+    loadDuos();
+  }
+
+  async function loadDuos() {
+    const params = buildFilterParams("df");
+    const body = document.getElementById("duosBody");
+    try {
+      const res = await fetch("/api/scrims/duos?" + params.toString());
+      if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
+      const data = await res.json();
+      if (!data.length) { body.innerHTML = '<p style="color:#999">Sem dados de duos.</p>'; return; }
+
+      let html = `<table class="champ-table"><thead><tr>
+        <th>Role 1</th><th>Champ 1</th><th>Role 2</th><th>Champ 2</th><th>Games</th><th>W</th><th>L</th><th>WR%</th>
+      </tr></thead><tbody>`;
+      for (const d of data) {
+        html += `<tr>
+          <td style="text-transform:capitalize">${d.role1}</td>
+          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(d.champion1, 20)} ${escHtml(d.champion1)}</div></td>
+          <td style="text-transform:capitalize">${d.role2}</td>
+          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(d.champion2, 20)} ${escHtml(d.champion2)}</div></td>
+          <td>${d.games}</td><td>${d.wins}</td><td>${d.losses}</td>
+          <td style="font-weight:600;color:${d.winrate >= 50 ? '#16a34a' : '#dc2626'}">${d.winrate}%</td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+      body.innerHTML = html;
+    } catch (e) {
+      body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
+    }
+  }
+
+  // ================================================================
+  // PICK ORDER TAB
+  // ================================================================
+  async function renderPickOrderTab() {
+    const content = document.getElementById("scrimContent");
+    content.innerHTML = filtersBarHtml("pf") + '<div id="pickBody"><p style="color:#999">Carregando...</p></div>';
+    await populateFilters("pf");
+    document.getElementById("pfBtn").onclick = loadPickOrder;
+    loadPickOrder();
+  }
+
+  async function loadPickOrder() {
+    const params = buildFilterParams("pf");
+    const body = document.getElementById("pickBody");
+    try {
+      const res = await fetch("/api/scrims/pick-priority?" + params.toString());
+      if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
+      const data = await res.json();
+      if (!data.length) { body.innerHTML = '<p style="color:#999">Sem dados de pick order.</p>'; return; }
+
+      let html = `<table class="champ-table"><thead><tr>
+        <th>Pick #</th><th>Side</th><th>Champion</th><th>Role</th><th>Games</th><th>W</th><th>L</th><th>WR%</th>
+      </tr></thead><tbody>`;
+      for (const p of data) {
+        html += `<tr>
+          <td>${p.pick_order}</td>
+          <td style="text-transform:capitalize">${p.side}</td>
+          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(p.champion, 20)} ${escHtml(p.champion)}</div></td>
+          <td style="text-transform:capitalize">${p.role}</td>
+          <td>${p.games}</td><td>${p.wins}</td><td>${p.losses}</td>
+          <td style="font-weight:600;color:${p.winrate >= 50 ? '#16a34a' : '#dc2626'}">${p.winrate}%</td>
+        </tr>`;
+      }
+      html += "</tbody></table>";
+      body.innerHTML = html;
+    } catch (e) {
+      body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
+    }
+  }
+
+  // ---- Helpers ----
+  function showMessage(text, type) {
+    const el = document.getElementById("scrimMessage");
+    if (!el) return;
+    el.className = "scrim-message " + type;
+    el.textContent = text;
+    setTimeout(() => {
+      el.textContent = "";
+      el.className = "";
+    }, 4000);
+  }
+
+  function escHtml(str) {
+    if (!str) return "";
+    const d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ---- Expose init ----
+  window.initScrim = initScrim;
+})();

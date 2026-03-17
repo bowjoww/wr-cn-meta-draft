@@ -117,7 +117,7 @@ def test_fetch_cn_meta_uses_gtimg_hero_map(monkeypatch):
     monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {"10001": {"hero_name_cn": "安妮", "hero_name_global": "Annie"}})
     monkeypatch.setattr("app.fetch_cn_meta._request_with_rate_limit", lambda url: DummyResponse(_stats_payload(10001)))
 
-    rows = fetch_cn_meta(role="mid", tier="diamond")
+    rows = fetch_cn_meta(role="mid", tier="diamond_plus")
 
     assert rows
     assert rows[0]["champion"] == "Annie"
@@ -127,7 +127,7 @@ def test_fetch_cn_meta_fallbacks_to_hero_id_when_missing_in_map(monkeypatch):
     monkeypatch.setattr("app.fetch_cn_meta.fetch_hero_map_from_gtimg", lambda: {})
     monkeypatch.setattr("app.fetch_cn_meta._request_with_rate_limit", lambda url: DummyResponse(_stats_payload(19999)))
 
-    rows = fetch_cn_meta(role="mid", tier="diamond")
+    rows = fetch_cn_meta(role="mid", tier="diamond_plus")
 
     assert rows
     assert rows[0]["champion"] == "hero_19999"
@@ -160,9 +160,9 @@ def test_fetch_cn_meta_role_position_mapping_mid_adc_support(monkeypatch):
         ),
     )
 
-    mid_rows = fetch_cn_meta(role="mid", tier="diamond")
-    adc_rows = fetch_cn_meta(role="adc", tier="diamond")
-    support_rows = fetch_cn_meta(role="support", tier="diamond")
+    mid_rows = fetch_cn_meta(role="mid", tier="diamond_plus")
+    adc_rows = fetch_cn_meta(role="adc", tier="diamond_plus")
+    support_rows = fetch_cn_meta(role="support", tier="diamond_plus")
 
     assert mid_rows[0]["hero_id"] == "10001"
     assert adc_rows[0]["hero_id"] == "10003"
@@ -176,11 +176,11 @@ def test_fetch_cn_meta_role_filtering_uses_row_position_without_rotation(monkeyp
         lambda url: DummyResponse(_nested_stats_payload_with_mixed_positions()),
     )
 
-    assert fetch_cn_meta(role="top", tier="diamond")[0]["hero_id"] == "10002"
-    assert fetch_cn_meta(role="jungle", tier="diamond")[0]["hero_id"] == "10005"
-    assert fetch_cn_meta(role="mid", tier="diamond")[0]["hero_id"] == "10001"
-    assert fetch_cn_meta(role="adc", tier="diamond")[0]["hero_id"] == "10003"
-    assert fetch_cn_meta(role="support", tier="diamond")[0]["hero_id"] == "10004"
+    assert fetch_cn_meta(role="top", tier="diamond_plus")[0]["hero_id"] == "10002"
+    assert fetch_cn_meta(role="jungle", tier="diamond_plus")[0]["hero_id"] == "10005"
+    assert fetch_cn_meta(role="mid", tier="diamond_plus")[0]["hero_id"] == "10001"
+    assert fetch_cn_meta(role="adc", tier="diamond_plus")[0]["hero_id"] == "10003"
+    assert fetch_cn_meta(role="support", tier="diamond_plus")[0]["hero_id"] == "10004"
 
 
 def test_fetch_cn_meta_filters_multilane_duplicates_by_position(monkeypatch):
@@ -203,7 +203,7 @@ def test_fetch_cn_meta_filters_multilane_duplicates_by_position(monkeypatch):
         ),
     )
 
-    adc_rows = fetch_cn_meta(role="adc", tier="diamond")
+    adc_rows = fetch_cn_meta(role="adc", tier="diamond_plus")
 
     assert {row["hero_id"] for row in adc_rows} == {"10099", "10100"}
     assert all(row["position"] == 3 for row in adc_rows)
@@ -238,9 +238,9 @@ def test_summarize_cn_positions_groups_lane_distribution(monkeypatch):
 
     from app.fetch_cn_meta import summarize_cn_positions
 
-    payload = summarize_cn_positions(tier="challenger")
+    payload = summarize_cn_positions(tier="monarch")
 
-    assert payload["tier"] == "challenger"
+    assert payload["tier"] == "monarch"
     assert payload["positions"]["1"]["count"] == 2
     assert payload["positions"]["1"]["lane_dist"]["单人路"]["count"] == 2
     assert payload["positions"]["1"]["top_bans"][0]["hero_id"] == "10001"

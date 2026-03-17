@@ -34,9 +34,14 @@ ROLE_TO_POSITION = {
 }
 
 TIER_TO_CN_TIER = {
-    "diamond": "1",
+    "diamond_plus": "1",
     "master": "2",
-    "challenger": "3",
+    "monarch": "3",
+    "rift_peak": "4",
+}
+
+DISPLAY_NAME_OVERRIDES: dict[str, str] = {
+    "MonkeyKing": "Wukong",
 }
 
 
@@ -236,6 +241,12 @@ def _build_hero_map(payload: Any) -> dict[str, dict[str, str]]:
                     row["hero_name_global"] = str(hero_name_global).strip()
                 if hero_lane:
                     row["lane"] = str(hero_lane).strip()
+                if node.get("avatar"):
+                    row["avatar_url"] = str(node["avatar"]).strip()
+                if node.get("card"):
+                    row["card_url"] = str(node["card"]).strip()
+                if node.get("poster"):
+                    row["poster_url"] = str(node["poster"]).strip()
                 if row:
                     hero_map[str(hero_id)] = row
 
@@ -260,10 +271,11 @@ def _cache_age_from_fetched_at(fetched_at: str | None) -> int:
     return int((datetime.now(timezone.utc) - parsed).total_seconds())
 
 
-def fetch_hero_map_from_gtimg() -> dict[str, dict[str, str]]:
-    cache_payload = _read_json_cache(HERO_MAP_CACHE_PATH)
-    if cache_payload and _cache_age_from_fetched_at(cache_payload.get("fetched_at")) <= HERO_MAP_CACHE_TTL_SECONDS:
-        return (cache_payload.get("items") or {})
+def fetch_hero_map_from_gtimg(force_refresh: bool = False) -> dict[str, dict[str, str]]:
+    if not force_refresh:
+        cache_payload = _read_json_cache(HERO_MAP_CACHE_PATH)
+        if cache_payload and _cache_age_from_fetched_at(cache_payload.get("fetched_at")) <= HERO_MAP_CACHE_TTL_SECONDS:
+            return (cache_payload.get("items") or {})
 
     js_text = _request_with_rate_limit(HERO_MAP_URL).text
     hero_map = _extract_hero_map(js_text)
@@ -295,6 +307,7 @@ def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[
         or hero_name_cn
         or f"hero_{hero_id}"
     )
+    champion = DISPLAY_NAME_OVERRIDES.get(champion, champion)
 
     normalized = {
         "hero_id": hero_id,
@@ -307,6 +320,7 @@ def _normalize_cn_row(row: dict[str, Any], role: str, tier: str, hero_map: dict[
         "winrate": _rate_to_ratio(row, "win_rate", "win_rate_percent"),
         "pickrate": _rate_to_ratio(row, "appear_rate", "appear_rate_percent"),
         "banrate": _rate_to_ratio(row, "forbid_rate", "forbid_rate_percent"),
+        "avatar_url": hero_data.get("avatar_url", ""),
     }
     normalized["priority_score"] = priority_score(
         winrate=normalized["winrate"],
@@ -409,14 +423,10 @@ def _tier_candidate_nodes(payload: dict[str, Any], tier: str) -> list[Any]:
     if not isinstance(data, dict):
         return [data]
 
-    candidates: list[Any] = []
-    for key in (tier_key, "0"):
-        node = data.get(key)
-        if node is not None:
-            candidates.append(node)
-    if not candidates:
-        candidates.append(data)
-    return candidates
+    node = data.get(tier_key)
+    if node is not None:
+        return [node]
+    return [data]
 
 
 def fetch_cn_payload(tier: str) -> dict[str, Any]:

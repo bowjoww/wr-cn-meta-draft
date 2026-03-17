@@ -23,7 +23,7 @@ def _cn_payload_positions() -> dict:
     return {
         "result": 0,
         "data": {
-            "0": {
+            "4": {
                 "1": [{"hero_id": 101, "position": "1", "win_rate": 0.51, "appear_rate": 0.10, "forbid_rate": 0.01}],
                 "2": [{"hero_id": 102, "position": "2", "win_rate": 0.52, "appear_rate": 0.10, "forbid_rate": 0.01}],
                 "3": [{"hero_id": 103, "position": "3", "win_rate": 0.53, "appear_rate": 0.10, "forbid_rate": 0.01}],
@@ -38,7 +38,7 @@ def _cn_payload_positions_named() -> dict:
     return {
         "result": 0,
         "data": {
-            "0": {
+            "4": {
                 "1": [{"hero_id": 401, "hero_name": "MID_HERO", "position": 1, "win_rate": 0.51, "appear_rate": 0.10, "forbid_rate": 0.01}],
                 "2": [{"hero_id": 402, "hero_name": "TOP_HERO", "position": "2", "win_rate": 0.52, "appear_rate": 0.10, "forbid_rate": 0.01}],
                 "3": [{"hero_id": 403, "hero_name": "ADC_HERO", "position": 3, "win_rate": 0.53, "appear_rate": 0.10, "forbid_rate": 0.01}],
@@ -53,7 +53,7 @@ def _cn_payload_with_duplicates() -> dict:
     return {
         "result": 0,
         "data": {
-            "0": {
+            "4": {
                 "1": [
                     {"hero_id": 201, "position": "2", "win_rate": 0.50, "appear_rate": 0.10, "forbid_rate": 0.20},
                     {"hero_id": 201, "position": "2", "win_rate": 0.55, "appear_rate": 0.11, "forbid_rate": 0.25},
@@ -71,7 +71,7 @@ def test_meta_auto_fallbacks_to_sample_when_cn_fails(monkeypatch):
     monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: (_ for _ in ()).throw(RuntimeError("boom")))
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
 
-    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "auto"})
+    response = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "auto"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -83,7 +83,7 @@ def test_meta_cn_returns_502_when_cn_fails(monkeypatch):
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
     monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: (_ for _ in ()).throw(RuntimeError("boom")))
 
-    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "cn"})
+    response = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "cn"})
 
     assert response.status_code == 502
     assert "CN source unavailable" in response.json()["detail"]
@@ -94,7 +94,7 @@ def test_cn_cache_within_ttl_skips_network_fetch(monkeypatch):
         {
             "champion": "hero_10138",
             "role": "top",
-            "tier": "diamond",
+            "tier": "diamond_plus",
             "winrate": 0.55,
             "pickrate": 0.12,
             "banrate": 0.33,
@@ -111,7 +111,7 @@ def test_cn_cache_within_ttl_skips_network_fetch(monkeypatch):
 
     monkeypatch.setattr("app.main.fetch_cn_payload", fake_fetch)
 
-    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "auto"})
+    response = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "auto"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -126,7 +126,7 @@ def test_meta_cn_response_includes_last_fetch(monkeypatch):
         {
             "champion": "hero_10138",
             "role": "top",
-            "tier": "diamond",
+            "tier": "diamond_plus",
             "winrate": 0.55,
             "pickrate": 0.12,
             "banrate": 0.33,
@@ -136,7 +136,7 @@ def test_meta_cn_response_includes_last_fetch(monkeypatch):
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: cached_items)
     monkeypatch.setattr("app.main.read_cache", lambda: {"fetched_at": "2026-01-02T03:04:05+00:00"})
 
-    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "cn"})
+    response = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "cn"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -151,7 +151,7 @@ def test_meta_name_lang_global_uses_global_champion_name(monkeypatch):
             "hero_name_global": "Tryndamere",
             "champion": "蛮王",
             "role": "top",
-            "tier": "diamond",
+            "tier": "diamond_plus",
             "winrate": 0.55,
             "pickrate": 0.12,
             "banrate": 0.33,
@@ -162,7 +162,7 @@ def test_meta_name_lang_global_uses_global_champion_name(monkeypatch):
 
     response = client.get(
         "/meta",
-        params={"role": "top", "tier": "diamond", "source": "cn", "name_lang": "global"},
+        params={"role": "top", "tier": "diamond_plus", "source": "cn", "name_lang": "global"},
     )
 
     assert response.status_code == 200
@@ -178,7 +178,7 @@ def test_meta_name_lang_cn_uses_chinese_champion_name(monkeypatch):
             "hero_name_global": "Tryndamere",
             "champion": "Tryndamere",
             "role": "top",
-            "tier": "diamond",
+            "tier": "diamond_plus",
             "winrate": 0.55,
             "pickrate": 0.12,
             "banrate": 0.33,
@@ -189,7 +189,7 @@ def test_meta_name_lang_cn_uses_chinese_champion_name(monkeypatch):
 
     response = client.get(
         "/meta",
-        params={"role": "top", "tier": "diamond", "source": "cn", "name_lang": "cn"},
+        params={"role": "top", "tier": "diamond_plus", "source": "cn", "name_lang": "cn"},
     )
 
     assert response.status_code == 200
@@ -250,7 +250,7 @@ def test_meta_cn_role_to_position_mapping_for_all_roles(monkeypatch):
     for role, position in expected.items():
         response = client.get(
             "/meta",
-            params={"role": role, "tier": "challenger", "source": "cn"},
+            params={"role": role, "tier": "rift_peak", "source": "cn"},
         )
         assert response.status_code == 200
         payload = response.json()
@@ -271,7 +271,7 @@ def test_meta_cn_support_does_not_return_jungle(monkeypatch):
 
     response = client.get(
         "/meta",
-        params={"role": "support", "tier": "challenger", "source": "cn"},
+        params={"role": "support", "tier": "rift_peak", "source": "cn"},
     )
 
     assert response.status_code == 200
@@ -287,7 +287,7 @@ def test_meta_cn_dedup_by_hero_id_keeps_best_score(monkeypatch):
     monkeypatch.setattr("app.main.fetch_cn_payload", lambda tier: _cn_payload_with_duplicates())
     monkeypatch.setattr("app.main.fetch_hero_map_from_gtimg", lambda: {})
 
-    response = client.get("/meta", params={"role": "top", "tier": "challenger", "source": "cn"})
+    response = client.get("/meta", params={"role": "top", "tier": "rift_peak", "source": "cn"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -310,7 +310,7 @@ def test_cache_filter_per_request_does_not_shift_roles(monkeypatch):
 
     monkeypatch.setattr("app.main.update_cache", _capture_cache)
 
-    response_top = client.get("/meta", params={"role": "top", "tier": "challenger", "source": "cn"})
+    response_top = client.get("/meta", params={"role": "top", "tier": "rift_peak", "source": "cn"})
     assert response_top.status_code == 200
     assert response_top.json()["items"][0]["hero_id"] == "102"
 
@@ -325,7 +325,7 @@ def test_cache_filter_per_request_does_not_shift_roles(monkeypatch):
         ),
     )
 
-    response_jungle = client.get("/meta", params={"role": "jungle", "tier": "challenger", "source": "cn"})
+    response_jungle = client.get("/meta", params={"role": "jungle", "tier": "rift_peak", "source": "cn"})
 
     assert response_jungle.status_code == 200
     assert response_jungle.json()["items"][0]["hero_id"] == "105"
@@ -347,7 +347,7 @@ def test_meta_cn_uses_fixed_role_position_mapping_with_named_payload(monkeypatch
     }
 
     for role, champion in expected_champion_by_role.items():
-        response = client.get("/meta", params={"role": role, "tier": "challenger", "source": "cn"})
+        response = client.get("/meta", params={"role": role, "tier": "rift_peak", "source": "cn"})
         assert response.status_code == 200
         items = response.json()["items"]
         assert len(items) == 1
@@ -366,7 +366,7 @@ def test_meta_cn_cached_raw_payload_filters_per_request_with_fixed_mapping(monke
 
     monkeypatch.setattr("app.main.update_cache", _capture_cache)
 
-    top_response = client.get("/meta", params={"role": "top", "tier": "challenger", "source": "cn"})
+    top_response = client.get("/meta", params={"role": "top", "tier": "rift_peak", "source": "cn"})
     assert top_response.status_code == 200
     assert top_response.json()["items"][0]["champion"] == "TOP_HERO"
 
@@ -381,7 +381,7 @@ def test_meta_cn_cached_raw_payload_filters_per_request_with_fixed_mapping(monke
         ),
     )
 
-    mid_response = client.get("/meta", params={"role": "mid", "tier": "challenger", "source": "cn"})
+    mid_response = client.get("/meta", params={"role": "mid", "tier": "rift_peak", "source": "cn"})
     assert mid_response.status_code == 200
     assert mid_response.json()["items"][0]["champion"] == "MID_HERO"
     assert top_response.json()["items"][0]["champion"] != mid_response.json()["items"][0]["champion"]
@@ -398,17 +398,17 @@ def test_meta_debug_cn_positions(monkeypatch):
         },
     )
 
-    response = client.get("/meta/debug/cn_positions", params={"tier": "challenger"})
+    response = client.get("/meta/debug/cn_positions", params={"tier": "rift_peak"})
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["tier"] == "challenger"
+    assert payload["tier"] == "rift_peak"
     assert payload["positions"]["1"]["count"] == 1
     assert payload["positions"]["1"]["top_bans"][0]["hero_id"] == "103"
 
 
 def test_meta_returns_power_and_draft_scores():
-    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "sample"})
+    response = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "sample"})
 
     assert response.status_code == 200
     first = response.json()["items"][0]
@@ -419,23 +419,23 @@ def test_meta_returns_power_and_draft_scores():
 
 def test_meta_sorting_by_draft_and_power_score(monkeypatch):
     rows = [
-        {"champion": "C", "role": "top", "tier": "diamond", "winrate": 0.53, "pickrate": 0.12, "banrate": 0.08},
-        {"champion": "A", "role": "top", "tier": "diamond", "winrate": 0.50, "pickrate": 0.18, "banrate": 0.25},
-        {"champion": "B", "role": "top", "tier": "diamond", "winrate": 0.57, "pickrate": 0.09, "banrate": 0.03},
+        {"champion": "C", "role": "top", "tier": "diamond_plus", "winrate": 0.53, "pickrate": 0.12, "banrate": 0.08},
+        {"champion": "A", "role": "top", "tier": "diamond_plus", "winrate": 0.50, "pickrate": 0.18, "banrate": 0.25},
+        {"champion": "B", "role": "top", "tier": "diamond_plus", "winrate": 0.57, "pickrate": 0.09, "banrate": 0.03},
     ]
     monkeypatch.setattr("app.main._load_meta_data", lambda: rows)
 
     draft_desc = client.get(
         "/meta",
-        params={"role": "top", "tier": "diamond", "source": "sample", "sort": "draft_score", "dir": "desc"},
+        params={"role": "top", "tier": "diamond_plus", "source": "sample", "sort": "draft_score", "dir": "desc"},
     )
     draft_asc = client.get(
         "/meta",
-        params={"role": "top", "tier": "diamond", "source": "sample", "sort": "draft_score", "dir": "asc"},
+        params={"role": "top", "tier": "diamond_plus", "source": "sample", "sort": "draft_score", "dir": "asc"},
     )
     power_desc = client.get(
         "/meta",
-        params={"role": "top", "tier": "diamond", "source": "sample", "sort": "power_score", "dir": "desc"},
+        params={"role": "top", "tier": "diamond_plus", "source": "sample", "sort": "power_score", "dir": "desc"},
     )
 
     assert draft_desc.status_code == 200
@@ -452,14 +452,14 @@ def test_meta_sorting_by_draft_and_power_score(monkeypatch):
 
 def test_meta_view_changes_default_sort(monkeypatch):
     rows = [
-        {"champion": "C", "role": "top", "tier": "diamond", "winrate": 0.53, "pickrate": 0.12, "banrate": 0.08},
-        {"champion": "A", "role": "top", "tier": "diamond", "winrate": 0.50, "pickrate": 0.18, "banrate": 0.25},
-        {"champion": "B", "role": "top", "tier": "diamond", "winrate": 0.57, "pickrate": 0.09, "banrate": 0.03},
+        {"champion": "C", "role": "top", "tier": "diamond_plus", "winrate": 0.53, "pickrate": 0.12, "banrate": 0.08},
+        {"champion": "A", "role": "top", "tier": "diamond_plus", "winrate": 0.50, "pickrate": 0.18, "banrate": 0.25},
+        {"champion": "B", "role": "top", "tier": "diamond_plus", "winrate": 0.57, "pickrate": 0.09, "banrate": 0.03},
     ]
     monkeypatch.setattr("app.main._load_meta_data", lambda: rows)
 
-    draft_view = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "sample", "view": "draft"})
-    power_view = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "sample", "view": "power"})
+    draft_view = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "sample", "view": "draft"})
+    power_view = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "sample", "view": "power"})
 
     assert draft_view.status_code == 200
     assert power_view.status_code == 200

@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.fetch_cn_meta import (
     CACHE_TTL_SECONDS,
@@ -24,19 +25,30 @@ from app.fetch_cn_meta import (
     update_cache,
 )
 from app.scoring import EPSILON, power_score, priority_score, zscore
+from app.scrim_db import init_db
+from app.scrim_routes import router as scrim_router
 
 app = FastAPI(title="WR CN Meta Viewer")
+app.include_router(scrim_router)
 logger = logging.getLogger(__name__)
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_cn_meta.json"
-STATIC_INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_INDEX_PATH = STATIC_DIR / "index.html"
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
 
 Role = Literal["top", "jungle", "mid", "adc", "support"]
-Tier = Literal["diamond", "master", "challenger"]
+Tier = Literal["diamond_plus", "master", "monarch", "rift_peak"]
 Source = Literal["auto", "sample", "cn"]
 NameLang = Literal["global", "cn"]
 View = Literal["draft", "power"]
-SortField = Literal["champion", "win", "pick", "ban", "draft_score", "power_score"]
+SortField = Literal["champion", "win", "pick", "ban", "presence", "draft_score", "power_score"]
 SortDir = Literal["asc", "desc"]
 
 
@@ -86,6 +98,7 @@ def _sort_rows(rows: list[dict], sort: SortField, direction: SortDir) -> list[di
         "win": lambda item: item.get("winrate", 0.0),
         "pick": lambda item: item.get("pickrate", 0.0),
         "ban": lambda item: item.get("banrate", 0.0),
+        "presence": lambda item: (item.get("pickrate", 0.0) + item.get("banrate", 0.0)),
         "draft_score": lambda item: item.get("draft_score", 0.0),
         "power_score": lambda item: item.get("power_score", 0.0),
     }
@@ -102,10 +115,13 @@ def _filter_and_score(rows: list[dict], role: Role, tier: Tier, sort: SortField,
 
 
 def _resolve_champion_name(row: dict, name_lang: NameLang) -> str:
+    from app.fetch_cn_meta import DISPLAY_NAME_OVERRIDES
+
     hero_id = str(row.get("hero_id", "")).strip()
     if name_lang == "cn":
         return row.get("hero_name_cn") or row.get("hero_name_global") or row.get("champion") or f"hero_{hero_id}"
-    return row.get("hero_name_global") or row.get("hero_name_cn") or row.get("champion") or f"hero_{hero_id}"
+    name = row.get("hero_name_global") or row.get("hero_name_cn") or row.get("champion") or f"hero_{hero_id}"
+    return DISPLAY_NAME_OVERRIDES.get(name, name)
 
 
 def _with_champion_lang(rows: list[dict], name_lang: NameLang) -> list[dict]:
@@ -187,6 +203,7 @@ def meta(
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"CN source unavailable: {exc}") from exc
 
+    warning = ""
     try:
         cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
         if cn_rows:
@@ -207,11 +224,15 @@ def meta(
                 "source": used_source or "cn_cache",
                 "last_fetch": _cached_cn_last_fetch(),
             }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("CN source failed in auto mode, falling back to sample: %s", exc)
+        warning = f"Dados CN indisponíveis ({exc}). Usando dados sample como fallback."
 
     rows = _filter_and_score(_load_meta_data(), role=role, tier=tier, sort=sort_field, direction=dir)
-    return {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample", "last_fetch": None}
+    result: dict[str, Any] = {"items": _with_champion_lang(rows, name_lang=name_lang), "source": "sample", "last_fetch": None}
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 @app.get("/meta/source")

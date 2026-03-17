@@ -3,40 +3,112 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WR CN Meta Viewer</title>
+    <title>WR Meta Command</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/scrim.css">
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 2rem;
-      }
+      /* ===== META VIEWER INLINE STYLES ===== */
       .source-banner {
-        margin-bottom: 0.75rem;
-        color: #444;
+        margin-bottom: 0.4rem;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        font-family: var(--font-mono);
       }
       .controls {
         display: flex;
         gap: 0.75rem;
-        margin-bottom: 1rem;
+        margin-bottom: 1.25rem;
         flex-wrap: wrap;
         align-items: center;
       }
+      .controls label {
+        font-weight: 600;
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        letter-spacing: 0.02em;
+      }
+      .controls select,
+      .controls input[type="checkbox"] {
+        accent-color: var(--accent);
+      }
+      .controls select {
+        background: var(--surface);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.85rem;
+        font-family: var(--font-mono);
+      }
+      .controls select:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 0 2px var(--accent-glow);
+      }
+      .controls button {
+        padding: 0.45rem 1rem;
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--accent);
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 0.82rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .controls button:hover {
+        background: var(--accent);
+        color: var(--bg-deep);
+        box-shadow: 0 0 12px var(--accent-glow);
+      }
+      #forceRefresh {
+        border-color: var(--magenta) !important;
+        color: var(--magenta) !important;
+      }
+      #forceRefresh:hover {
+        background: var(--magenta) !important;
+        color: var(--bg-deep) !important;
+        box-shadow: 0 0 12px rgba(232, 121, 249, 0.3) !important;
+      }
       .view-tabs {
         display: inline-flex;
-        margin-bottom: 0.75rem;
-        border: 1px solid #ddd;
-        border-radius: 8px;
+        margin-bottom: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
         overflow: hidden;
       }
       .view-tab {
         border: none;
-        background: #f5f5f5;
-        padding: 0.5rem 0.75rem;
+        background: var(--surface);
+        padding: 0.5rem 1rem;
         cursor: pointer;
-        font-weight: 600;
+        font-weight: 700;
+        font-family: var(--font-heading);
+        font-size: 0.82rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        transition: all 0.2s;
       }
       .view-tab.active {
-        background: #2d6cdf;
-        color: #fff;
+        background: var(--accent);
+        color: var(--bg-deep);
+      }
+      .view-tab:hover:not(.active) {
+        background: var(--surface-hover);
+        color: var(--text-primary);
+      }
+      /* Meta table */
+      .meta-table-wrap {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
       }
       table {
         width: 100%;
@@ -44,238 +116,392 @@
       }
       th,
       td {
-        border: 1px solid #ddd;
-        padding: 0.5rem;
+        padding: 0.6rem 0.75rem;
         text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.85rem;
       }
       th {
-        background: #f6f6f6;
+        background: var(--surface);
+        color: var(--text-secondary);
+        font-family: var(--font-heading);
+        font-weight: 700;
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
       th.sortable {
         cursor: pointer;
         user-select: none;
+        transition: color 0.15s;
+      }
+      th.sortable:hover {
+        color: var(--accent);
+      }
+      td {
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+      }
+      tr:hover td {
+        background: var(--surface-hover);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .champ-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-family: var(--font-heading);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .champ-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        object-fit: cover;
+        background: var(--surface);
+        flex-shrink: 0;
+        border: 1px solid var(--border);
+      }
+      .champ-avatar-fallback {
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        background: var(--accent);
+        color: var(--bg-deep);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.78rem;
+        flex-shrink: 0;
       }
       #message {
         margin-top: 0.75rem;
-        color: #666;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        font-family: var(--font-mono);
+        letter-spacing: 0.02em;
+      }
+      .warning-banner {
+        background: rgba(251, 191, 36, 0.1);
+        color: #fbbf24;
+        border: 1px solid rgba(251, 191, 36, 0.3);
+        border-radius: 6px;
+        padding: 0.6rem 0.9rem;
+        margin-bottom: 1rem;
+        font-size: 0.82rem;
+        display: none;
+        font-family: var(--font-mono);
       }
     </style>
   </head>
   <body>
-    <h1>WR CN Meta Viewer</h1>
-    <div id="sourceLabel" class="source-banner">Fonte: sample</div>
-    <div id="cnTimestamp" class="source-banner"></div>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-icon">&#9876;</span>
+          <span class="brand-text">WR<span class="brand-accent">META</span></span>
+        </div>
+        <nav class="top-nav">
+          <button id="navMeta" class="active" onclick="switchSection('meta')">Meta Viewer</button>
+          <button id="navScrim" onclick="switchSection('scrim')">Scrim Tracker</button>
+        </nav>
+      </header>
 
-    <div class="controls">
-      <label>
-        Role
-        <select id="role">
-          <option value="top">top</option>
-          <option value="jungle">jungle</option>
-          <option value="mid">mid</option>
-          <option value="adc">adc</option>
-          <option value="support">support</option>
-        </select>
-      </label>
+      <main class="app-main">
+        <section id="metaSection">
+          <div class="section-header">
+            <h1>Meta Viewer</h1>
+            <span class="section-tag">CN SERVER DATA</span>
+          </div>
+          <div id="sourceLabel" class="source-banner">Fonte: sample</div>
+          <div id="cnTimestamp" class="source-banner"></div>
 
-      <label>
-        Tier
-        <select id="tier">
-          <option value="diamond">diamond</option>
-          <option value="master">master</option>
-          <option value="challenger">challenger</option>
-        </select>
-      </label>
+          <div class="controls">
+            <label>
+              Role
+              <select id="role">
+                <option value="top">top</option>
+                <option value="jungle">jungle</option>
+                <option value="mid">mid</option>
+                <option value="adc">adc</option>
+                <option value="support">support</option>
+              </select>
+            </label>
 
-      <label>
-        <input id="useCn" type="checkbox" checked />
-        Usar dados CN (se disponível)
-      </label>
+            <label>
+              Tier
+              <select id="tier">
+                <option value="diamond_plus">Diamante+</option>
+                <option value="master">Mestre</option>
+                <option value="monarch">Monarca</option>
+                <option value="rift_peak">Pico do Rift</option>
+              </select>
+            </label>
 
-      <button id="load">Carregar</button>
+            <label>
+              <input id="useCn" type="checkbox" checked />
+              Usar dados CN
+            </label>
+
+            <button id="load">Carregar</button>
+            <button id="forceRefresh" title="Forcar atualizacao dos dados CN">Forcar Refresh</button>
+          </div>
+
+          <div id="warningBanner" class="warning-banner"></div>
+
+          <div class="view-tabs">
+            <button id="tabDraft" class="view-tab active" data-view="draft">Draft Priority</button>
+            <button id="tabPower" class="view-tab" data-view="power">Power (PBI-like)</button>
+          </div>
+
+          <div class="meta-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="champion">Champion</th>
+                  <th class="sortable" data-sort="win">Win</th>
+                  <th class="sortable" data-sort="pick">Pick</th>
+                  <th class="sortable" data-sort="ban">Ban</th>
+                  <th class="sortable" data-sort="presence">Presence</th>
+                  <th id="scoreHeader" class="sortable" data-sort="draft_score">Draft Priority</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+
+          <div id="message"></div>
+
+          <script>
+            const loadButton = document.getElementById("load");
+            const roleSelect = document.getElementById("role");
+            const tierSelect = document.getElementById("tier");
+            const useCnCheckbox = document.getElementById("useCn");
+            const rowsBody = document.getElementById("rows");
+            const message = document.getElementById("message");
+            const sourceLabel = document.getElementById("sourceLabel");
+            const cnTimestamp = document.getElementById("cnTimestamp");
+            const tabDraft = document.getElementById("tabDraft");
+            const tabPower = document.getElementById("tabPower");
+            const scoreHeader = document.getElementById("scoreHeader");
+            const sortableHeaders = document.querySelectorAll("th.sortable");
+            const warningBanner = document.getElementById("warningBanner");
+            const forceRefreshBtn = document.getElementById("forceRefresh");
+
+            const state = {
+              view: "draft",
+              sort: "draft_score",
+              dir: "desc",
+            };
+
+            function pct(value) {
+              return `${(value * 100).toFixed(1)}%`;
+            }
+
+            function currentScoreField() {
+              return state.view === "power" ? "power_score" : "draft_score";
+            }
+
+            function updateTabs() {
+              tabDraft.classList.toggle("active", state.view === "draft");
+              tabPower.classList.toggle("active", state.view === "power");
+            }
+
+            function labelForSort(sortKey) {
+              if (sortKey === "champion") return "Champion";
+              if (sortKey === "win") return "Win";
+              if (sortKey === "pick") return "Pick";
+              if (sortKey === "ban") return "Ban";
+              if (sortKey === "presence") return "Presence";
+              return state.view === "power" ? "Power" : "Draft Priority";
+            }
+
+            function updateHeaders() {
+              const scoreField = currentScoreField();
+              scoreHeader.dataset.sort = scoreField;
+              scoreHeader.textContent = state.view === "power" ? "Power (PBI-like)" : "Draft Priority";
+
+              sortableHeaders.forEach((header) => {
+                const key = header.dataset.sort;
+                const isActive = key === state.sort;
+                const arrow = isActive ? (state.dir === "asc" ? " \u2191" : " \u2193") : "";
+                header.textContent = `${labelForSort(key)}${arrow}`;
+              });
+            }
+
+            function champCell(item) {
+              const name = item.champion || "?";
+              if (item.avatar_url) {
+                return `<td><div class="champ-cell"><img class="champ-avatar" src="${item.avatar_url}" alt="${name}" onerror="this.outerHTML='<span class=\\'champ-avatar-fallback\\'>${name[0]}</span>'">${name}</div></td>`;
+              }
+              return `<td><div class="champ-cell"><span class="champ-avatar-fallback">${name[0]}</span>${name}</div></td>`;
+            }
+
+            function render(items) {
+              rowsBody.innerHTML = "";
+              const scoreField = currentScoreField();
+
+              items.forEach((item) => {
+                const tr = document.createElement("tr");
+                const presence = (item.pickrate || 0) + (item.banrate || 0);
+                tr.innerHTML = `
+                  ${champCell(item)}
+                  <td>${pct(item.winrate)}</td>
+                  <td>${pct(item.pickrate)}</td>
+                  <td>${pct(item.banrate)}</td>
+                  <td>${pct(presence)}</td>
+                  <td>${(item[scoreField] ?? item.priority_score).toFixed(3)}</td>
+                `;
+                rowsBody.appendChild(tr);
+              });
+            }
+
+            function formatCnTimestamp(isoDate) {
+              if (!isoDate) return "";
+              const parsed = new Date(isoDate);
+              if (Number.isNaN(parsed.getTime())) {
+                return `Dados CN obtidos em: ${isoDate}`;
+              }
+              return `Dados CN obtidos em: ${parsed.toLocaleString("pt-BR")}`;
+            }
+
+            async function refreshSourceLabel() {
+              try {
+                const response = await fetch("/meta/source");
+                if (!response.ok) return;
+                const data = await response.json();
+                sourceLabel.textContent = `Fonte: ${data.source}`;
+                cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
+              } catch (err) {
+                // silent fallback
+              }
+            }
+
+            async function loadMeta(refresh) {
+              const role = roleSelect.value;
+              const tier = tierSelect.value;
+              const source = useCnCheckbox.checked ? "auto" : "sample";
+              const scoreSort = currentScoreField();
+
+              if (!["champion", "win", "pick", "ban", "presence", "draft_score", "power_score"].includes(state.sort)) {
+                state.sort = scoreSort;
+              }
+
+              rowsBody.innerHTML = "";
+              message.textContent = "Carregando...";
+              warningBanner.style.display = "none";
+
+              try {
+                const query = new URLSearchParams({
+                  role,
+                  tier,
+                  source,
+                  view: state.view,
+                  sort: state.sort,
+                  dir: state.dir,
+                });
+                if (refresh) query.set("refresh", "force");
+                const response = await fetch(`/meta?${query.toString()}`);
+                if (!response.ok) {
+                  throw new Error("Falha ao carregar dados");
+                }
+                const data = await response.json();
+                render(data.items);
+                sourceLabel.textContent = `Fonte: ${data.source}`;
+                cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
+                message.textContent = `Mostrando ${data.items.length} campe\u00f5es \u00b7 ordenado por ${labelForSort(state.sort)} (${state.dir})`;
+                if (data.warning) {
+                  warningBanner.textContent = data.warning;
+                  warningBanner.style.display = "block";
+                }
+              } catch (err) {
+                rowsBody.innerHTML = "";
+                message.textContent = err.message;
+                cnTimestamp.textContent = "";
+                await refreshSourceLabel();
+              }
+            }
+
+            function setView(view) {
+              state.view = view;
+              const scoreField = currentScoreField();
+              if (state.sort === "draft_score" || state.sort === "power_score") {
+                state.sort = scoreField;
+              }
+              updateTabs();
+              updateHeaders();
+              loadMeta();
+            }
+
+            function onSortClick(header) {
+              const key = header.dataset.sort;
+              if (state.sort === key) {
+                state.dir = state.dir === "asc" ? "desc" : "asc";
+              } else {
+                state.sort = key;
+                state.dir = key === "champion" ? "asc" : "desc";
+              }
+              updateHeaders();
+              loadMeta();
+            }
+
+            tabDraft.addEventListener("click", () => setView("draft"));
+            tabPower.addEventListener("click", () => setView("power"));
+            loadButton.addEventListener("click", () => loadMeta());
+            forceRefreshBtn.addEventListener("click", () => {
+              forceRefreshBtn.disabled = true;
+              forceRefreshBtn.textContent = "Atualizando...";
+              fetch("/api/champions/refresh").finally(() => {
+                forceRefreshBtn.disabled = false;
+                forceRefreshBtn.textContent = "Forcar Refresh";
+              });
+              loadMeta(true);
+            });
+            sortableHeaders.forEach((header) => header.addEventListener("click", () => onSortClick(header)));
+
+            updateTabs();
+            updateHeaders();
+            loadMeta();
+          </script>
+        </section>
+
+        <section id="scrimSection" style="display:none">
+          <div class="section-header">
+            <h1>Scrim Tracker</h1>
+            <span class="section-tag">MATCH ANALYTICS</span>
+          </div>
+          <div class="scrim-tabs" id="scrimSubTabs"></div>
+          <div id="scrimContent"></div>
+        </section>
+      </main>
     </div>
 
-    <div class="view-tabs">
-      <button id="tabDraft" class="view-tab active" data-view="draft">Draft Priority</button>
-      <button id="tabPower" class="view-tab" data-view="power">Power (PBI-like)</button>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th class="sortable" data-sort="champion">Champion</th>
-          <th class="sortable" data-sort="win">Win</th>
-          <th class="sortable" data-sort="pick">Pick</th>
-          <th class="sortable" data-sort="ban">Ban</th>
-          <th id="scoreHeader" class="sortable" data-sort="draft_score">Draft Priority</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-
-    <div id="message"></div>
-
+    <script src="/static/scrim.js"></script>
     <script>
-      const loadButton = document.getElementById("load");
-      const roleSelect = document.getElementById("role");
-      const tierSelect = document.getElementById("tier");
-      const useCnCheckbox = document.getElementById("useCn");
-      const rowsBody = document.getElementById("rows");
-      const message = document.getElementById("message");
-      const sourceLabel = document.getElementById("sourceLabel");
-      const cnTimestamp = document.getElementById("cnTimestamp");
-      const tabDraft = document.getElementById("tabDraft");
-      const tabPower = document.getElementById("tabPower");
-      const scoreHeader = document.getElementById("scoreHeader");
-      const sortableHeaders = document.querySelectorAll("th.sortable");
+      function switchSection(section) {
+        const metaEl = document.getElementById('metaSection');
+        const scrimEl = document.getElementById('scrimSection');
+        const navMeta = document.getElementById('navMeta');
+        const navScrim = document.getElementById('navScrim');
 
-      const state = {
-        view: "draft",
-        sort: "draft_score",
-        dir: "desc",
-      };
-
-      function pct(value) {
-        return `${(value * 100).toFixed(1)}%`;
-      }
-
-      function currentScoreField() {
-        return state.view === "power" ? "power_score" : "draft_score";
-      }
-
-      function updateTabs() {
-        tabDraft.classList.toggle("active", state.view === "draft");
-        tabPower.classList.toggle("active", state.view === "power");
-      }
-
-      function labelForSort(sortKey) {
-        if (sortKey === "champion") return "Champion";
-        if (sortKey === "win") return "Win";
-        if (sortKey === "pick") return "Pick";
-        if (sortKey === "ban") return "Ban";
-        return state.view === "power" ? "Power" : "Draft Priority";
-      }
-
-      function updateHeaders() {
-        const scoreField = currentScoreField();
-        scoreHeader.dataset.sort = scoreField;
-        scoreHeader.textContent = state.view === "power" ? "Power (PBI-like)" : "Draft Priority";
-
-        sortableHeaders.forEach((header) => {
-          const key = header.dataset.sort;
-          const isActive = key === state.sort;
-          const arrow = isActive ? (state.dir === "asc" ? " ↑" : " ↓") : "";
-          header.textContent = `${labelForSort(key)}${arrow}`;
-        });
-      }
-
-      function render(items) {
-        rowsBody.innerHTML = "";
-        const scoreField = currentScoreField();
-
-        items.forEach((item) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${item.champion}</td>
-            <td>${pct(item.winrate)}</td>
-            <td>${pct(item.pickrate)}</td>
-            <td>${pct(item.banrate)}</td>
-            <td>${(item[scoreField] ?? item.priority_score).toFixed(3)}</td>
-          `;
-          rowsBody.appendChild(tr);
-        });
-      }
-
-      function formatCnTimestamp(isoDate) {
-        if (!isoDate) return "";
-        const parsed = new Date(isoDate);
-        if (Number.isNaN(parsed.getTime())) {
-          return `Dados CN obtidos em: ${isoDate}`;
-        }
-        return `Dados CN obtidos em: ${parsed.toLocaleString("pt-BR")}`;
-      }
-
-      async function refreshSourceLabel() {
-        try {
-          const response = await fetch("/meta/source");
-          if (!response.ok) return;
-          const data = await response.json();
-          sourceLabel.textContent = `Fonte: ${data.source}`;
-          cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
-        } catch (err) {
-          // silent fallback
-        }
-      }
-
-      async function loadMeta() {
-        const role = roleSelect.value;
-        const tier = tierSelect.value;
-        const source = useCnCheckbox.checked ? "auto" : "sample";
-        const scoreSort = currentScoreField();
-
-        if (!["champion", "win", "pick", "ban", "draft_score", "power_score"].includes(state.sort)) {
-          state.sort = scoreSort;
-        }
-
-        message.textContent = "Carregando...";
-
-        try {
-          const query = new URLSearchParams({
-            role,
-            tier,
-            source,
-            view: state.view,
-            sort: state.sort,
-            dir: state.dir,
-          });
-          const response = await fetch(`/meta?${query.toString()}`);
-          if (!response.ok) {
-            throw new Error("Falha ao carregar dados");
-          }
-          const data = await response.json();
-          render(data.items);
-          sourceLabel.textContent = `Fonte: ${data.source}`;
-          cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
-          message.textContent = `Mostrando ${data.items.length} campeões · ordenado por ${labelForSort(state.sort)} (${state.dir})`;
-        } catch (err) {
-          rowsBody.innerHTML = "";
-          message.textContent = err.message;
-          cnTimestamp.textContent = "";
-          await refreshSourceLabel();
-        }
-      }
-
-      function setView(view) {
-        state.view = view;
-        const scoreField = currentScoreField();
-        if (state.sort === "draft_score" || state.sort === "power_score") {
-          state.sort = scoreField;
-        }
-        updateTabs();
-        updateHeaders();
-        loadMeta();
-      }
-
-      function onSortClick(header) {
-        const key = header.dataset.sort;
-        if (state.sort === key) {
-          state.dir = state.dir === "asc" ? "desc" : "asc";
+        if (section === 'meta') {
+          metaEl.style.display = '';
+          scrimEl.style.display = 'none';
+          navMeta.classList.add('active');
+          navScrim.classList.remove('active');
         } else {
-          state.sort = key;
-          state.dir = key === "champion" ? "asc" : "desc";
+          metaEl.style.display = 'none';
+          scrimEl.style.display = '';
+          navMeta.classList.remove('active');
+          navScrim.classList.add('active');
+          window.initScrim();
         }
-        updateHeaders();
-        loadMeta();
       }
-
-      tabDraft.addEventListener("click", () => setView("draft"));
-      tabPower.addEventListener("click", () => setView("power"));
-      loadButton.addEventListener("click", loadMeta);
-      sortableHeaders.forEach((header) => header.addEventListener("click", () => onSortClick(header)));
-
-      updateTabs();
-      updateHeaders();
-      loadMeta();
     </script>
   </body>
 </html>
