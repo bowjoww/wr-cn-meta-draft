@@ -19,7 +19,7 @@ Extract the match data and return ONLY valid JSON with this structure:
 {{
   "side": "blue" or "red" (which side OUR team is on),
   "result": "win" or "loss" (result from OUR team's perspective),
-  "duration": "MM:SS" (game duration if visible),
+  "duration": "MM:SS" (game duration — look for it near "Wild Rift" text in the top-left corner, below the game mode name like "ALTERNADA PARA TORNEIOS" or "ESCOLHAS ÀS CEGAS"),
   "players": [
     {{
       "role": "top"|"jungle"|"mid"|"bot"|"support",

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import atexit
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +61,20 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _checkpoint() -> None:
+    """Force WAL checkpoint so all data is written to the main DB file."""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+    except Exception:
+        pass
+
+
+# Checkpoint WAL on process exit to prevent data loss
+atexit.register(_checkpoint)
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     """Add columns that may be missing in older databases."""
     cursor = conn.execute("PRAGMA table_info(match_players)")
@@ -102,7 +116,8 @@ def insert_match(data: dict[str, Any]) -> int:
 
         _insert_players(conn, match_id, data.get("players", []))
         _insert_bans(conn, match_id, data.get("bans", []))
-        return match_id
+    _checkpoint()
+    return match_id
 
 
 def _insert_players(conn: sqlite3.Connection, match_id: int, players: list[dict]) -> None:
@@ -169,7 +184,10 @@ def delete_match(match_id: int) -> bool:
     """Delete a match and cascade to players/bans. Returns True if deleted."""
     with _connect() as conn:
         cur = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
-        return cur.rowcount > 0
+        deleted = cur.rowcount > 0
+    if deleted:
+        _checkpoint()
+    return deleted
 
 
 def update_match(match_id: int, data: dict[str, Any]) -> bool:
@@ -200,7 +218,8 @@ def update_match(match_id: int, data: dict[str, Any]) -> bool:
 
         _insert_players(conn, match_id, data.get("players", []))
         _insert_bans(conn, match_id, data.get("bans", []))
-        return True
+    _checkpoint()
+    return True
 
 
 def list_matches(
@@ -306,7 +325,16 @@ def get_stat_summary(
             ROUND(AVG(p.kills), 1) as avg_kills,
             ROUND(AVG(p.deaths), 1) as avg_deaths,
             ROUND(AVG(p.assists), 1) as avg_assists,
-            ROUND(AVG(p.kp_percent), 1) as avg_kp
+            ROUND(AVG(p.kp_percent), 1) as avg_kp,
+            ROUND(AVG(p.gold_earned), 0) as avg_gold,
+            ROUND(AVG(
+                CASE WHEN m.duration IS NOT NULL AND p.gold_earned IS NOT NULL
+                THEN p.gold_earned / (
+                    CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS REAL)
+                    + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
+                )
+                END
+            ), 0) as avg_gpm
         FROM match_players p
         JOIN matches m ON p.match_id = m.id
         WHERE p.team = 'ours'{extra_where}
@@ -370,7 +398,16 @@ def get_champion_stats(
             ROUND(AVG(p.kills), 1) as avg_kills,
             ROUND(AVG(p.deaths), 1) as avg_deaths,
             ROUND(AVG(p.assists), 1) as avg_assists,
-            ROUND(AVG(p.kp_percent), 1) as avg_kp
+            ROUND(AVG(p.kp_percent), 1) as avg_kp,
+            ROUND(AVG(p.gold_earned), 0) as avg_gold,
+            ROUND(AVG(
+                CASE WHEN m.duration IS NOT NULL AND p.gold_earned IS NOT NULL
+                THEN p.gold_earned / (
+                    CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS REAL)
+                    + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
+                )
+                END
+            ), 0) as avg_gpm
         FROM match_players p
         JOIN matches m ON p.match_id = m.id
         WHERE 1=1{extra_where}
@@ -419,11 +456,16 @@ def get_champion_stats(
                 "our_bans": ban_map.get(champ, {}).get("ours", 0),
                 "their_bans": ban_map.get(champ, {}).get("theirs", 0),
                 "by_role": {},
+                "_gpm_sum": 0,
+                "_gpm_count": 0,
             }
 
         cd = champ_data[champ]
         cd["total_games"] += r["games"]
         cd["total_wins"] += r["wins"]
+        if r["avg_gpm"]:
+            cd["_gpm_sum"] += r["avg_gpm"] * r["games"]
+            cd["_gpm_count"] += r["games"]
         if r["team"] == "ours":
             cd["our_picks"] += r["games"]
         else:
@@ -451,6 +493,11 @@ def get_champion_stats(
         cd["presence"] = (
             round((cd["total_games"] + total_bans) / max(total_matches, 1) * 100, 1)
         )
+        cd["avg_gpm"] = (
+            round(cd["_gpm_sum"] / cd["_gpm_count"]) if cd["_gpm_count"] > 0 else None
+        )
+        del cd["_gpm_sum"]
+        del cd["_gpm_count"]
         result.append(cd)
 
     result.sort(key=lambda x: x["total_games"], reverse=True)

@@ -31,6 +31,7 @@
   --magenta: #e879f9;
   --blue-team: #3b82f6;
   --red-team: #ef4444;
+  --gold: #f0b429;
 
   /* Fonts */
   --font-heading: "Chakra Petch", sans-serif;
@@ -377,6 +378,11 @@ body::before {
   padding: 0.3rem 0.5rem 0.3rem 28px;
   font-size: 0.85rem;
   font-family: var(--font-mono);
+}
+
+.player-row input[type="text"]::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .player-row input[type="text"]:focus {

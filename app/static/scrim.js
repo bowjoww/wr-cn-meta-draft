@@ -935,7 +935,7 @@
                   <div class="stat-row" style="display:flex;align-items:center;gap:6px">
                     ${champAvatarHtml(c.champion, 22)}
                     <span style="flex:1">${escHtml(c.champion)} <small>(${c.games}g)</small></span>
-                    <span class="value">${c.winrate}% WR | ${c.kda} KDA</span>
+                    <span class="value">${c.winrate}% WR | ${c.kda} KDA${c.avg_gpm ? ` | ${c.avg_gpm} GPM` : ""}</span>
                   </div>`
                   )
                   .join("")
@@ -986,6 +986,7 @@
             <th>Games</th>
             <th>Presence%</th>
             <th>WR%</th>
+            <th>Avg GPM</th>
             <th>Our Picks</th>
             <th>Their Picks</th>
             <th>Our Bans</th>
@@ -1002,6 +1003,7 @@
           <td>${c.total_games}</td>
           <td>${c.presence}%</td>
           <td>${c.winrate}%</td>
+          <td>${c.avg_gpm || "-"}</td>
           <td>${c.our_picks}</td>
           <td>${c.their_picks}</td>
           <td>${c.our_bans}</td>
