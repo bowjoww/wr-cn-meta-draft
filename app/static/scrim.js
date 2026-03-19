@@ -95,7 +95,7 @@
     avatarPreview.className = "champ-preview";
 
     const dropdown = document.createElement("div");
-    dropdown.style.cssText = "position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:100;display:none";
+    dropdown.style.cssText = "position:absolute;top:100%;left:0;width:220px;max-height:200px;overflow-y:auto;background:#1e2633;border:1px solid #252d3a;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:100;display:none";
 
     function updatePreview() {
       const val = input.value.trim();
@@ -125,7 +125,7 @@
       dropdown.innerHTML = matches
         .map(
           (c) =>
-            `<div class="champ-option" data-name="${escHtml(c.name)}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f0f0f0">
+            `<div class="champ-option" data-name="${escHtml(c.name)}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:0.85rem;color:#e2e8f0;border-bottom:1px solid #252d3a">
               ${c.avatar_url ? `<img src="${c.avatar_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">` : ""}
               <span>${escHtml(c.name)}</span>
             </div>`
@@ -140,7 +140,7 @@
           dropdown.style.display = "none";
           updatePreview();
         };
-        opt.onmouseenter = () => (opt.style.background = "#f0f4ff");
+        opt.onmouseenter = () => (opt.style.background = "#1c2230");
         opt.onmouseleave = () => (opt.style.background = "");
       });
     }
@@ -321,6 +321,16 @@
     document.getElementById("btnSaveMatch").onclick = saveMatch;
     document.getElementById("btnClearForm").onclick = clearForm;
     document.getElementById("btnCancelEdit").onclick = () => { clearForm(); showMessage("Edicao cancelada", "success"); };
+
+    // Auto-fill patch with last used value
+    const patchField = document.getElementById("fPatch");
+    if (!patchField.value) {
+      fetch("/api/scrims/filters").then(r => r.json()).then(f => {
+        if (f.patches?.length && !patchField.value) {
+          patchField.value = f.patches[0];
+        }
+      }).catch(() => {});
+    }
 
     // Upload area
     const uploadArea = document.getElementById("uploadArea");
@@ -972,31 +982,48 @@
     }
   }
 
+  let champSortKey = "total_games";
+  let champSortDir = "desc";
+  let champLastData = [];
+  let champLastContainer = null;
+
   function renderChampionTable(data, container) {
+    champLastData = data;
+    champLastContainer = container;
+
     if (!data.length) {
       container.innerHTML = '<p style="color:#999">Nenhum dado de campeao ainda.</p>';
       return;
     }
 
-    let html = `
-      <table class="champ-table">
-        <thead>
-          <tr>
-            <th>Champion</th>
-            <th>Games</th>
-            <th>Presence%</th>
-            <th>WR%</th>
-            <th>Avg GPM</th>
-            <th>Our Picks</th>
-            <th>Their Picks</th>
-            <th>Our Bans</th>
-            <th>Their Bans</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
+    const cols = [
+      { key: null, label: "Champion" },
+      { key: "total_games", label: "Games" },
+      { key: "presence", label: "Presence%" },
+      { key: "winrate", label: "WR%" },
+      { key: "avg_gpm", label: "Avg GPM" },
+      { key: "our_picks", label: "Our Picks" },
+      { key: "their_picks", label: "Their Picks" },
+      { key: "our_bans", label: "Our Bans" },
+      { key: "their_bans", label: "Their Bans" },
+    ];
 
-    for (const c of data) {
+    const sorted = [...data].sort((a, b) => {
+      const va = a[champSortKey] ?? -Infinity;
+      const vb = b[champSortKey] ?? -Infinity;
+      return champSortDir === "desc" ? vb - va : va - vb;
+    });
+
+    let html = `<table class="champ-table"><thead><tr>`;
+    for (const col of cols) {
+      const arrow = col.key === champSortKey ? (champSortDir === "desc" ? " ▼" : " ▲") : "";
+      const activeClass = col.key === champSortKey ? "sort-active" : "";
+      const sortAttr = col.key ? `data-sort="${col.key}"` : "";
+      html += `<th class="${activeClass}" ${sortAttr}>${col.label}${arrow}</th>`;
+    }
+    html += `</tr></thead><tbody>`;
+
+    for (const c of sorted) {
       html += `
         <tr>
           <td><div style="display:flex;align-items:center;gap:6px">${champAvatarHtml(c.champion, 24)}<strong>${escHtml(c.champion)}</strong></div></td>
@@ -1008,12 +1035,25 @@
           <td>${c.their_picks}</td>
           <td>${c.our_bans}</td>
           <td>${c.their_bans}</td>
-        </tr>
-      `;
+        </tr>`;
     }
 
     html += "</tbody></table>";
     container.innerHTML = html;
+
+    // Attach sort handlers
+    container.querySelectorAll("th[data-sort]").forEach((th) => {
+      th.onclick = () => {
+        const key = th.dataset.sort;
+        if (champSortKey === key) {
+          champSortDir = champSortDir === "desc" ? "asc" : "desc";
+        } else {
+          champSortKey = key;
+          champSortDir = "desc";
+        }
+        renderChampionTable(champLastData, champLastContainer);
+      };
+    });
   }
 
   // ================================================================

@@ -698,6 +698,15 @@ body::before {
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
+  transition: color 0.15s;
+}
+
+.champ-table th:hover {
+  color: var(--accent);
+}
+
+.champ-table th.sort-active {
+  color: var(--accent);
 }
 
 .champ-table td {
