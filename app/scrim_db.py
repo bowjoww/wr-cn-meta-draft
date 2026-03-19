@@ -83,6 +83,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE match_players ADD COLUMN is_mvp INTEGER NOT NULL DEFAULT 0")
     if "is_svp" not in existing:
         conn.execute("ALTER TABLE match_players ADD COLUMN is_svp INTEGER NOT NULL DEFAULT 0")
+    # Normalize champion names (e.g. MonkeyKing -> Wukong)
+    conn.execute("UPDATE match_players SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
+    conn.execute("UPDATE bans SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
 
 
 def init_db() -> None:

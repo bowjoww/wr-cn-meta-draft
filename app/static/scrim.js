@@ -909,6 +909,58 @@
     }
   }
 
+  // ---- Tier Score Formula ----
+  function computeTierScore(champ, maxGames) {
+    const wr = (champ.winrate || 0) / 100;
+    const kda = Math.min((champ.kda || 0) / 8, 1);
+    const gpm = Math.min((champ.avg_gpm || 0) / 600, 1);
+    const sample = maxGames > 0 ? Math.min(champ.games / maxGames, 1) : 0;
+    const raw = wr * 0.45 + kda * 0.25 + gpm * 0.15 + sample * 0.15;
+    const penalty = Math.min(champ.games / 3, 1);
+    return raw * penalty;
+  }
+
+  function getTierLabel(score) {
+    if (score >= 0.75) return "S";
+    if (score >= 0.55) return "A";
+    if (score >= 0.40) return "B";
+    if (score >= 0.25) return "C";
+    return "D";
+  }
+
+  function renderTierList(roles) {
+    let html = '<div class="tier-lists"><h2 style="margin-bottom:0.75rem">Tier List por Rota</h2>';
+    for (const role of ROLES) {
+      const roleData = roles[role] || [];
+      if (!roleData.length) continue;
+      const maxGames = Math.max(...roleData.map((c) => c.games));
+      const scored = roleData.map((c) => ({
+        ...c,
+        tierScore: computeTierScore(c, maxGames),
+      }));
+      scored.sort((a, b) => b.tierScore - a.tierScore);
+
+      const tiers = { S: [], A: [], B: [], C: [], D: [] };
+      for (const c of scored) {
+        tiers[getTierLabel(c.tierScore)].push(c);
+      }
+
+      html += `<div class="tier-role"><h3 style="text-transform:capitalize;margin-bottom:0.4rem">${role}</h3>`;
+      for (const [label, champs] of Object.entries(tiers)) {
+        if (!champs.length) continue;
+        html += `<div class="tier-row tier-${label.toLowerCase()}">
+          <span class="tier-label">${label}</span>
+          <div class="tier-champs">
+            ${champs.map((c) => `<span class="tier-champ" title="${escHtml(c.champion)} — ${c.games}g | ${c.winrate}% WR | ${c.kda} KDA${c.avg_gpm ? " | " + c.avg_gpm + " GPM" : ""} (score: ${(c.tierScore * 100).toFixed(0)})">${champAvatarHtml(c.champion, 30)}</span>`).join("")}
+          </div>
+        </div>`;
+      }
+      html += "</div>";
+    }
+    html += "</div>";
+    return html;
+  }
+
   function renderStatsBody(data, container) {
     const ov = data.overall || {};
     const roles = data.roles || {};
@@ -929,6 +981,9 @@
         </div>
       </div>
     `;
+
+    // Tier list by role
+    html += renderTierList(roles);
 
     html += '<div class="stats-grid">';
     for (const role of ROLES) {
@@ -1057,8 +1112,46 @@
   }
 
   // ================================================================
+  // GENERIC SORTABLE TABLE HELPERS
+  // ================================================================
+  function genericSort(data, key, dir) {
+    return [...data].sort((a, b) => {
+      const va = a[key] ?? "";
+      const vb = b[key] ?? "";
+      if (typeof va === "string" && typeof vb === "string") {
+        return dir === "desc" ? vb.localeCompare(va) : va.localeCompare(vb);
+      }
+      return dir === "desc" ? (vb || 0) - (va || 0) : (va || 0) - (vb || 0);
+    });
+  }
+
+  function sortTh(label, key, activeKey, dir) {
+    const arrow = key === activeKey ? (dir === "desc" ? " ▼" : " ▲") : "";
+    const cls = key === activeKey ? "sort-active" : "";
+    return `<th class="${cls}" data-sort="${key}">${label}${arrow}</th>`;
+  }
+
+  function attachSortHandlers(container, state, renderFn) {
+    container.querySelectorAll("th[data-sort]").forEach((th) => {
+      th.onclick = () => {
+        const key = th.dataset.sort;
+        if (state.key === key) {
+          state.dir = state.dir === "desc" ? "asc" : "desc";
+        } else {
+          state.key = key;
+          state.dir = "desc";
+        }
+        renderFn();
+      };
+    });
+  }
+
+  // ================================================================
   // MATCHUPS TAB
   // ================================================================
+  const matchupSort = { key: "games", dir: "desc" };
+  let matchupData = [];
+
   async function renderMatchupsTab() {
     const content = document.getElementById("scrimContent");
     content.innerHTML = filtersBarHtml("mf") + '<div id="matchupsBody"><p style="color:#999">Carregando...</p></div>';
@@ -1073,32 +1166,48 @@
     try {
       const res = await fetch("/api/scrims/matchups?" + params.toString());
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
-      const data = await res.json();
-      if (!data.length) { body.innerHTML = '<p style="color:#999">Sem dados de matchup.</p>'; return; }
-
-      let html = `<table class="champ-table"><thead><tr>
-        <th>Role</th><th>Nosso Champ</th><th>vs</th><th>Champ Deles</th><th>Games</th><th>W</th><th>L</th><th>WR%</th>
-      </tr></thead><tbody>`;
-      for (const m of data) {
-        html += `<tr>
-          <td style="text-transform:capitalize">${m.role}</td>
-          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(m.our_champion, 20)} ${escHtml(m.our_champion)}</div></td>
-          <td>vs</td>
-          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(m.their_champion, 20)} ${escHtml(m.their_champion)}</div></td>
-          <td>${m.games}</td><td>${m.wins}</td><td>${m.losses}</td>
-          <td style="font-weight:600;color:${m.winrate >= 50 ? '#16a34a' : '#dc2626'}">${m.winrate}%</td>
-        </tr>`;
-      }
-      html += "</tbody></table>";
-      body.innerHTML = html;
+      matchupData = await res.json();
+      if (!matchupData.length) { body.innerHTML = '<p style="color:#999">Sem dados de matchup.</p>'; return; }
+      renderMatchupsTable();
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
   }
 
+  function renderMatchupsTable() {
+    const body = document.getElementById("matchupsBody");
+    const sorted = genericSort(matchupData, matchupSort.key, matchupSort.dir);
+    let html = `<table class="champ-table"><thead><tr>
+      ${sortTh("Role", "role", matchupSort.key, matchupSort.dir)}
+      ${sortTh("Nosso Champ", "our_champion", matchupSort.key, matchupSort.dir)}
+      <th>vs</th>
+      ${sortTh("Champ Deles", "their_champion", matchupSort.key, matchupSort.dir)}
+      ${sortTh("Games", "games", matchupSort.key, matchupSort.dir)}
+      ${sortTh("W", "wins", matchupSort.key, matchupSort.dir)}
+      ${sortTh("L", "losses", matchupSort.key, matchupSort.dir)}
+      ${sortTh("WR%", "winrate", matchupSort.key, matchupSort.dir)}
+    </tr></thead><tbody>`;
+    for (const m of sorted) {
+      html += `<tr>
+        <td style="text-transform:capitalize">${m.role}</td>
+        <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(m.our_champion, 20)} ${escHtml(m.our_champion)}</div></td>
+        <td>vs</td>
+        <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(m.their_champion, 20)} ${escHtml(m.their_champion)}</div></td>
+        <td>${m.games}</td><td>${m.wins}</td><td>${m.losses}</td>
+        <td style="font-weight:600;color:${m.winrate >= 50 ? '#16a34a' : '#dc2626'}">${m.winrate}%</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    body.innerHTML = html;
+    attachSortHandlers(body, matchupSort, renderMatchupsTable);
+  }
+
   // ================================================================
   // DUOS TAB
   // ================================================================
+  const duoSort = { key: "games", dir: "desc" };
+  let duoData = [];
+
   async function renderDuosTab() {
     const content = document.getElementById("scrimContent");
     content.innerHTML = filtersBarHtml("df") + '<div id="duosBody"><p style="color:#999">Carregando...</p></div>';
@@ -1113,32 +1222,48 @@
     try {
       const res = await fetch("/api/scrims/duos?" + params.toString());
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
-      const data = await res.json();
-      if (!data.length) { body.innerHTML = '<p style="color:#999">Sem dados de duos.</p>'; return; }
-
-      let html = `<table class="champ-table"><thead><tr>
-        <th>Role 1</th><th>Champ 1</th><th>Role 2</th><th>Champ 2</th><th>Games</th><th>W</th><th>L</th><th>WR%</th>
-      </tr></thead><tbody>`;
-      for (const d of data) {
-        html += `<tr>
-          <td style="text-transform:capitalize">${d.role1}</td>
-          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(d.champion1, 20)} ${escHtml(d.champion1)}</div></td>
-          <td style="text-transform:capitalize">${d.role2}</td>
-          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(d.champion2, 20)} ${escHtml(d.champion2)}</div></td>
-          <td>${d.games}</td><td>${d.wins}</td><td>${d.losses}</td>
-          <td style="font-weight:600;color:${d.winrate >= 50 ? '#16a34a' : '#dc2626'}">${d.winrate}%</td>
-        </tr>`;
-      }
-      html += "</tbody></table>";
-      body.innerHTML = html;
+      duoData = await res.json();
+      if (!duoData.length) { body.innerHTML = '<p style="color:#999">Sem dados de duos.</p>'; return; }
+      renderDuosTable();
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
   }
 
+  function renderDuosTable() {
+    const body = document.getElementById("duosBody");
+    const sorted = genericSort(duoData, duoSort.key, duoSort.dir);
+    let html = `<table class="champ-table"><thead><tr>
+      ${sortTh("Role 1", "role1", duoSort.key, duoSort.dir)}
+      ${sortTh("Champ 1", "champion1", duoSort.key, duoSort.dir)}
+      ${sortTh("Role 2", "role2", duoSort.key, duoSort.dir)}
+      ${sortTh("Champ 2", "champion2", duoSort.key, duoSort.dir)}
+      ${sortTh("Games", "games", duoSort.key, duoSort.dir)}
+      ${sortTh("W", "wins", duoSort.key, duoSort.dir)}
+      ${sortTh("L", "losses", duoSort.key, duoSort.dir)}
+      ${sortTh("WR%", "winrate", duoSort.key, duoSort.dir)}
+    </tr></thead><tbody>`;
+    for (const d of sorted) {
+      html += `<tr>
+        <td style="text-transform:capitalize">${d.role1}</td>
+        <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(d.champion1, 20)} ${escHtml(d.champion1)}</div></td>
+        <td style="text-transform:capitalize">${d.role2}</td>
+        <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(d.champion2, 20)} ${escHtml(d.champion2)}</div></td>
+        <td>${d.games}</td><td>${d.wins}</td><td>${d.losses}</td>
+        <td style="font-weight:600;color:${d.winrate >= 50 ? '#16a34a' : '#dc2626'}">${d.winrate}%</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    body.innerHTML = html;
+    attachSortHandlers(body, duoSort, renderDuosTable);
+  }
+
   // ================================================================
   // PICK ORDER TAB
   // ================================================================
+  const pickSort = { key: "pick_order", dir: "asc" };
+  let pickData = [];
+
   async function renderPickOrderTab() {
     const content = document.getElementById("scrimContent");
     content.innerHTML = filtersBarHtml("pf") + '<div id="pickBody"><p style="color:#999">Carregando...</p></div>';
@@ -1153,27 +1278,40 @@
     try {
       const res = await fetch("/api/scrims/pick-priority?" + params.toString());
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
-      const data = await res.json();
-      if (!data.length) { body.innerHTML = '<p style="color:#999">Sem dados de pick order.</p>'; return; }
-
-      let html = `<table class="champ-table"><thead><tr>
-        <th>Pick #</th><th>Side</th><th>Champion</th><th>Role</th><th>Games</th><th>W</th><th>L</th><th>WR%</th>
-      </tr></thead><tbody>`;
-      for (const p of data) {
-        html += `<tr>
-          <td>${p.pick_order}</td>
-          <td style="text-transform:capitalize">${p.side}</td>
-          <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(p.champion, 20)} ${escHtml(p.champion)}</div></td>
-          <td style="text-transform:capitalize">${p.role}</td>
-          <td>${p.games}</td><td>${p.wins}</td><td>${p.losses}</td>
-          <td style="font-weight:600;color:${p.winrate >= 50 ? '#16a34a' : '#dc2626'}">${p.winrate}%</td>
-        </tr>`;
-      }
-      html += "</tbody></table>";
-      body.innerHTML = html;
+      pickData = await res.json();
+      if (!pickData.length) { body.innerHTML = '<p style="color:#999">Sem dados de pick order.</p>'; return; }
+      renderPickOrderTable();
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
+  }
+
+  function renderPickOrderTable() {
+    const body = document.getElementById("pickBody");
+    const sorted = genericSort(pickData, pickSort.key, pickSort.dir);
+    let html = `<table class="champ-table"><thead><tr>
+      ${sortTh("Pick #", "pick_order", pickSort.key, pickSort.dir)}
+      ${sortTh("Side", "side", pickSort.key, pickSort.dir)}
+      ${sortTh("Champion", "champion", pickSort.key, pickSort.dir)}
+      ${sortTh("Role", "role", pickSort.key, pickSort.dir)}
+      ${sortTh("Games", "games", pickSort.key, pickSort.dir)}
+      ${sortTh("W", "wins", pickSort.key, pickSort.dir)}
+      ${sortTh("L", "losses", pickSort.key, pickSort.dir)}
+      ${sortTh("WR%", "winrate", pickSort.key, pickSort.dir)}
+    </tr></thead><tbody>`;
+    for (const p of sorted) {
+      html += `<tr>
+        <td>${p.pick_order}</td>
+        <td style="text-transform:capitalize">${p.side}</td>
+        <td><div style="display:flex;align-items:center;gap:4px">${champAvatarHtml(p.champion, 20)} ${escHtml(p.champion)}</div></td>
+        <td style="text-transform:capitalize">${p.role}</td>
+        <td>${p.games}</td><td>${p.wins}</td><td>${p.losses}</td>
+        <td style="font-weight:600;color:${p.winrate >= 50 ? '#16a34a' : '#dc2626'}">${p.winrate}%</td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    body.innerHTML = html;
+    attachSortHandlers(body, pickSort, renderPickOrderTable);
   }
 
   // ---- Helpers ----

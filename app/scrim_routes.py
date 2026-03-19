@@ -28,6 +28,22 @@ from app.fetch_cn_meta import DISPLAY_NAME_OVERRIDES, HERO_MAP_CACHE_PATH, fetch
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_champion_name(name: str) -> str:
+    """Normalize champion names (e.g. MonkeyKing -> Wukong)."""
+    return DISPLAY_NAME_OVERRIDES.get(name, name)
+
+
+def _normalize_match_data(data: dict) -> dict:
+    """Normalize all champion names in match data before saving."""
+    for p in data.get("players", []):
+        if p.get("champion"):
+            p["champion"] = _normalize_champion_name(p["champion"])
+    for b in data.get("bans", []):
+        if b.get("champion"):
+            b["champion"] = _normalize_champion_name(b["champion"])
+    return data
+
 router = APIRouter()
 
 VALID_ROLES = {"top", "jungle", "mid", "bot", "support"}
@@ -113,23 +129,25 @@ class MatchInput(BaseModel):
 # Champions endpoint (reuses hero map)
 # ---------------------------------------------------------------------------
 
-@router.get("/api/champions")
-def api_champions() -> list[dict[str, str]]:
-    """Return the list of Wild Rift champions from the hero map cache."""
-    # Try cache first without network call
+def _load_hero_map() -> dict[str, Any]:
+    """Load hero map from cache or network."""
     if HERO_MAP_CACHE_PATH.exists():
         try:
             with HERO_MAP_CACHE_PATH.open("r", encoding="utf-8") as f:
                 cache = json.load(f)
             hero_map = cache.get("items", {})
             if hero_map:
-                return _hero_map_to_list(hero_map)
+                return hero_map
         except Exception:
             pass
+    return fetch_hero_map_from_gtimg()
 
-    # Fetch fresh
+
+@router.get("/api/champions")
+def api_champions() -> list[dict[str, str]]:
+    """Return the list of Wild Rift champions from the hero map cache."""
     try:
-        hero_map = fetch_hero_map_from_gtimg()
+        hero_map = _load_hero_map()
         return _hero_map_to_list(hero_map)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not load champion list: {exc}") from exc
@@ -169,7 +187,7 @@ def _hero_map_to_list(hero_map: dict[str, dict[str, str]]) -> list[dict[str, str
 
 @router.post("/api/scrims/matches")
 def create_match(body: MatchInput) -> dict[str, Any]:
-    data = body.model_dump()
+    data = _normalize_match_data(body.model_dump())
     match_id = insert_match(data)
     return {"id": match_id, "message": "Match created"}
 
@@ -203,7 +221,7 @@ def api_get_match(match_id: int) -> dict[str, Any]:
 
 @router.put("/api/scrims/matches/{match_id}")
 def api_update_match(match_id: int, body: MatchInput) -> dict[str, str]:
-    data = body.model_dump()
+    data = _normalize_match_data(body.model_dump())
     if not update_match(match_id, data):
         raise HTTPException(status_code=404, detail="Match not found")
     return {"message": "Match updated"}
@@ -308,8 +326,16 @@ async def api_ocr(
             "content_type": f.content_type or "image/png",
         })
 
+    # Load known champion names for fuzzy matching
+    champ_names: list[str] = []
     try:
-        result = extract_match_data(images, our_side=our_side)
+        hero_map = _load_hero_map()
+        champ_names = [c["name"] for c in _hero_map_to_list(hero_map)]
+    except Exception:
+        logger.warning("Could not load champion list for OCR matching")
+
+    try:
+        result = extract_match_data(images, our_side=our_side, known_champions=champ_names or None)
         return result
     except Exception as exc:
         logger.exception("OCR extraction failed")

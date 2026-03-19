@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import json
 import logging
 import os
@@ -51,15 +52,21 @@ Rules:
 - "Equipe Azul" = Blue Team, "Equipe Vermelha" = Red Team
 - Return ONLY the JSON, no markdown or extra text
 - If you cannot determine a field, use null (do NOT guess or use placeholder text)
+{champion_list_instruction}
 """
 
 
-def extract_match_data(images: list[dict[str, Any]], our_side: str | None = None) -> dict[str, Any]:
+def extract_match_data(
+    images: list[dict[str, Any]],
+    our_side: str | None = None,
+    known_champions: list[str] | None = None,
+) -> dict[str, Any]:
     """Extract match data from screenshot images using OpenAI Vision API.
 
     Args:
         images: List of dicts with 'data' (bytes) and 'content_type' (str).
         our_side: "blue" or "red" - which side the user's team is on.
+        known_champions: List of valid champion names for fuzzy matching.
 
     Returns:
         Parsed match data dict.
@@ -83,7 +90,18 @@ def extract_match_data(images: list[dict[str, Any]], our_side: str | None = None
             "but if unclear, assign the blue (left) team as 'ours'."
         )
 
-    prompt = EXTRACTION_PROMPT_TEMPLATE.format(our_side_instruction=side_instruction)
+    if known_champions:
+        champ_list_str = ", ".join(sorted(known_champions))
+        champion_list_instruction = (
+            f"\nIMPORTANT: Use ONLY champion names from this list (exact spelling): {champ_list_str}"
+        )
+    else:
+        champion_list_instruction = ""
+
+    prompt = EXTRACTION_PROMPT_TEMPLATE.format(
+        our_side_instruction=side_instruction,
+        champion_list_instruction=champion_list_instruction,
+    )
 
     from openai import OpenAI
 
@@ -123,4 +141,36 @@ def extract_match_data(images: list[dict[str, Any]], our_side: str | None = None
         logger.error("Failed to parse OCR response: %s", raw[:500])
         raise RuntimeError(f"Could not parse OCR response as JSON: {exc}") from exc
 
+    # Post-process: fuzzy-match champion names against known list
+    if known_champions:
+        _fuzzy_fix_champions(data, known_champions)
+
     return data
+
+
+def _fuzzy_fix_champions(data: dict[str, Any], known: list[str]) -> None:
+    """Fix champion names in OCR output via fuzzy matching against known list."""
+    from app.fetch_cn_meta import DISPLAY_NAME_OVERRIDES
+
+    known_lower = {n.lower(): n for n in known}
+
+    def _fix(name: str | None) -> str | None:
+        if not name:
+            return name
+        # Apply display name overrides first (e.g. MonkeyKing -> Wukong)
+        name = DISPLAY_NAME_OVERRIDES.get(name, name)
+        # Exact match (case-insensitive)
+        if name.lower() in known_lower:
+            return known_lower[name.lower()]
+        # Fuzzy match
+        matches = difflib.get_close_matches(name.lower(), known_lower.keys(), n=1, cutoff=0.6)
+        if matches:
+            corrected = known_lower[matches[0]]
+            logger.info("OCR fuzzy-matched '%s' -> '%s'", name, corrected)
+            return corrected
+        return name
+
+    for p in data.get("players", []):
+        p["champion"] = _fix(p.get("champion"))
+    for b in data.get("bans", []):
+        b["champion"] = _fix(b.get("champion"))

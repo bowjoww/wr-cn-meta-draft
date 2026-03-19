@@ -938,3 +938,83 @@ body::before {
     display: none;
   }
 }
+
+/* ===== Tier List ===== */
+.tier-lists {
+  margin-bottom: 1.5rem;
+}
+
+.tier-lists h2 {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.tier-role {
+  margin-bottom: 1rem;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.75rem;
+}
+
+.tier-role h3 {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.tier-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tier-row:last-child {
+  border-bottom: none;
+}
+
+.tier-label {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 800;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tier-champs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.tier-champ {
+  cursor: help;
+  transition: transform 0.15s;
+}
+
+.tier-champ:hover {
+  transform: scale(1.25);
+}
+
+/* Tier colors */
+.tier-s .tier-label { color: #fbbf24; }
+.tier-a .tier-label { color: #34d399; }
+.tier-b .tier-label { color: #60a5fa; }
+.tier-c .tier-label { color: #9ca3af; }
+.tier-d .tier-label { color: #6b7280; }
+
+.tier-s { background: rgba(251, 191, 36, 0.05); }
+.tier-a { background: rgba(52, 211, 153, 0.05); }
+.tier-b { background: rgba(96, 165, 250, 0.05); }
+.tier-c { background: transparent; }
+.tier-d { background: transparent; }
