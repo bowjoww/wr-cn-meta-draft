@@ -12,6 +12,9 @@ from pydantic import BaseModel, field_validator
 
 from app.scrim_db import (
     delete_match,
+    find_teams_by_players,
+    get_all_champions_by_role,
+    get_all_rosters,
     get_champion_stats,
     get_duos,
     get_match,
@@ -19,10 +22,12 @@ from app.scrim_db import (
     get_opponents,
     get_patches,
     get_pick_priority,
+    get_role_averages,
     get_stat_summary,
     insert_match,
     list_matches,
     update_match,
+    upsert_team_roster,
 )
 from app.fetch_cn_meta import DISPLAY_NAME_OVERRIDES, HERO_MAP_CACHE_PATH, fetch_hero_map_from_gtimg
 
@@ -301,6 +306,51 @@ def api_scrim_filters() -> dict[str, list[str]]:
     }
 
 
+@router.get("/api/scrims/role-averages")
+def api_role_averages(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> list[dict[str, Any]]:
+    return get_role_averages(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+    )
+
+
+@router.get("/api/scrims/all-champions-by-role")
+def api_all_champions_by_role(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    return get_all_champions_by_role(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+    )
+
+
+# ---------------------------------------------------------------------------
+# Roster endpoints
+# ---------------------------------------------------------------------------
+
+
+class RosterInput(BaseModel):
+    team_name: str
+    players: list[str]
+
+
+@router.get("/api/scrims/rosters")
+def api_get_rosters() -> dict[str, list[str]]:
+    return get_all_rosters()
+
+
+@router.post("/api/scrims/rosters")
+def api_upsert_roster(body: RosterInput) -> dict[str, str]:
+    upsert_team_roster(body.team_name, body.players)
+    return {"message": f"Roster for {body.team_name} updated ({len(body.players)} players)"}
+
+
 # ---------------------------------------------------------------------------
 # OCR endpoint (placeholder – implemented in ocr_service.py)
 # ---------------------------------------------------------------------------
@@ -336,6 +386,17 @@ async def api_ocr(
 
     try:
         result = extract_match_data(images, our_side=our_side, known_champions=champ_names or None)
+
+        # Try to detect opponent team from player names
+        player_names = [
+            p.get("player_name") for p in result.get("players", [])
+            if p.get("player_name") and p.get("team") == "theirs"
+        ]
+        if player_names:
+            matches = find_teams_by_players(player_names)
+            if matches and matches[0][1] >= 2:
+                result["suggested_opponent"] = matches[0][0]
+
         return result
     except Exception as exc:
         logger.exception("OCR extraction failed")

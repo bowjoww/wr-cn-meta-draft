@@ -469,3 +469,43 @@ def test_meta_view_changes_default_sort(monkeypatch):
 
     assert draft_items[0]["draft_score"] == max(item["draft_score"] for item in draft_items)
     assert power_items[0]["power_score"] == max(item["power_score"] for item in power_items)
+
+
+# ---- Scrim Tests ----
+
+
+def test_monkeyking_normalized_to_wukong():
+    """MonkeyKing champion name should be normalized to Wukong on save and retrieval."""
+    match_data = {
+        "patch": "7.0e",
+        "date": "2026-01-01",
+        "opponent": "TestTeam",
+        "side": "blue",
+        "result": "win",
+        "players": [
+            {"role": "top", "team": "ours", "champion": "MonkeyKing", "kills": 5, "deaths": 1, "assists": 3},
+            {"role": "top", "team": "theirs", "champion": "Garen", "kills": 1, "deaths": 5, "assists": 2},
+        ],
+        "bans": [
+            {"champion": "MonkeyKing", "team": "theirs", "ban_order": 1},
+        ],
+    }
+    resp = client.post("/api/scrims/matches", json=match_data)
+    assert resp.status_code == 200
+    match_id = resp.json()["id"]
+
+    # Retrieve and verify normalization
+    get_resp = client.get(f"/api/scrims/matches/{match_id}")
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+
+    player_champs = [p["champion"] for p in data["players"]]
+    assert "Wukong" in player_champs
+    assert "MonkeyKing" not in player_champs
+
+    ban_champs = [b["champion"] for b in data["bans"]]
+    assert "Wukong" in ban_champs
+    assert "MonkeyKing" not in ban_champs
+
+    # Cleanup
+    client.delete(f"/api/scrims/matches/{match_id}")

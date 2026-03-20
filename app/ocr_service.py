@@ -26,6 +26,7 @@ Extract the match data and return ONLY valid JSON with this structure:
       "role": "top"|"jungle"|"mid"|"bot"|"support",
       "team": "ours"|"theirs",
       "champion": "Champion Name",
+      "player_name": "player nickname or null",
       "kills": 0,
       "deaths": 0,
       "assists": 0,
@@ -51,6 +52,7 @@ Rules:
 - If the screenshot says "VITÓRIA" (victory), the team shown prominently won
 - "Equipe Azul" = Blue Team, "Equipe Vermelha" = Red Team
 - Return ONLY the JSON, no markdown or extra text
+- Extract player nicknames/summoner names shown next to each champion portrait. These are the in-game names of the players.
 - If you cannot determine a field, use null (do NOT guess or use placeholder text)
 {champion_list_instruction}
 """

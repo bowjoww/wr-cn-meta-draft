@@ -574,7 +574,7 @@
   function clearForm() {
     editingMatchId = null;
     updateSaveButton();
-    document.getElementById("fPatch").value = "";
+    // Keep patch value — it rarely changes between scrims
     document.getElementById("fDate").value = new Date().toISOString().slice(0, 10);
     document.getElementById("fOpponentSelect").value = "";
     document.getElementById("fOpponentOther").value = "";
@@ -833,6 +833,21 @@
         }
       }
     }
+
+    // Auto-suggest opponent from player name matching
+    if (data.suggested_opponent) {
+      const oppSelect = document.getElementById("fOpponentSelect");
+      const oppOther = document.getElementById("fOpponentOther");
+      const optValues = Array.from(oppSelect.options).map((o) => o.value);
+      if (optValues.includes(data.suggested_opponent)) {
+        oppSelect.value = data.suggested_opponent;
+        oppOther.style.display = "none";
+      } else {
+        oppSelect.value = "__other__";
+        oppOther.value = data.suggested_opponent;
+        oppOther.style.display = "";
+      }
+    }
   }
 
   // ================================================================
@@ -900,10 +915,16 @@
     const params = buildFilterParams("sf");
     const body = document.getElementById("statsBody");
     try {
-      const res = await fetch("/api/scrims/stats?" + params.toString());
-      if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
-      const data = await res.json();
-      renderStatsBody(data, body);
+      const [statsRes, roleAvgRes, allChampsRes] = await Promise.all([
+        fetch("/api/scrims/stats?" + params.toString()),
+        fetch("/api/scrims/role-averages?" + params.toString()),
+        fetch("/api/scrims/all-champions-by-role?" + params.toString()),
+      ]);
+      if (!statsRes.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
+      const data = await statsRes.json();
+      const roleAvg = roleAvgRes.ok ? await roleAvgRes.json() : [];
+      const allChamps = allChampsRes.ok ? await allChampsRes.json() : {};
+      renderStatsBody(data, body, roleAvg, allChamps);
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
@@ -928,8 +949,9 @@
     return "D";
   }
 
-  function renderTierList(roles) {
-    let html = '<div class="tier-lists"><h2 style="margin-bottom:0.75rem">Tier List por Rota</h2>';
+  function renderTierList(roles, title) {
+    title = title || "Tier List por Rota";
+    let html = `<div class="tier-lists"><h2 style="margin-bottom:0.75rem">${escHtml(title)}</h2>`;
     for (const role of ROLES) {
       const roleData = roles[role] || [];
       if (!roleData.length) continue;
@@ -961,9 +983,13 @@
     return html;
   }
 
-  function renderStatsBody(data, container) {
+  const ROLE_LABELS = { top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot", support: "Support" };
+
+  function renderStatsBody(data, container, roleAvg, allChamps) {
     const ov = data.overall || {};
     const roles = data.roles || {};
+    roleAvg = roleAvg || [];
+    allChamps = allChamps || {};
 
     let html = `
       <div class="overall-banner">
@@ -982,8 +1008,34 @@
       </div>
     `;
 
-    // Tier list by role
+    // Role averages cards
+    if (roleAvg.length) {
+      html += '<h2 style="margin:1rem 0 0.5rem">Desempenho por Rota</h2>';
+      html += '<div class="stats-grid">';
+      for (const role of ROLES) {
+        const ra = roleAvg.find((r) => r.role === role);
+        if (!ra) continue;
+        html += `
+          <div class="stat-card">
+            <h3>${ROLE_LABELS[role] || role}</h3>
+            <div class="stat-row"><span>Partidas</span><span class="value">${ra.games}</span></div>
+            <div class="stat-row"><span>KDA Medio</span><span class="value">${ra.kda}</span></div>
+            <div class="stat-row"><span>KP% Medio</span><span class="value">${ra.avg_kp != null ? ra.avg_kp + "%" : "—"}</span></div>
+            <div class="stat-row"><span>GPM Medio</span><span class="value">${ra.avg_gpm || "—"}</span></div>
+            <div class="stat-row"><span>K / D / A</span><span class="value">${ra.avg_kills} / ${ra.avg_deaths} / ${ra.avg_assists}</span></div>
+          </div>
+        `;
+      }
+      html += "</div>";
+    }
+
+    // Tier list by role (our team)
     html += renderTierList(roles);
+
+    // Tier list geral (all champions)
+    if (Object.keys(allChamps).length) {
+      html += renderTierList(allChamps, "Tier List Geral (Todos os Campeoes)");
+    }
 
     html += '<div class="stats-grid">';
     for (const role of ROLES) {

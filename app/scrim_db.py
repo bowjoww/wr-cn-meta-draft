@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS bans (
     team        TEXT NOT NULL CHECK(team IN ('ours','theirs')),
     ban_order   INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS team_rosters (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_name   TEXT NOT NULL,
+    player_nick TEXT NOT NULL,
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(team_name, player_nick)
+);
 """
 
 
@@ -378,6 +386,99 @@ def get_stat_summary(
     return {"roles": result, "overall": overall}
 
 
+def get_role_averages(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> list[dict[str, Any]]:
+    """Aggregate stats per role (across all champions) for our team."""
+    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    query = f"""
+        SELECT
+            p.role,
+            COUNT(*) as games,
+            ROUND(AVG(p.kills), 1) as avg_kills,
+            ROUND(AVG(p.deaths), 1) as avg_deaths,
+            ROUND(AVG(p.assists), 1) as avg_assists,
+            ROUND(AVG(p.kp_percent), 1) as avg_kp,
+            ROUND(AVG(p.gold_earned), 0) as avg_gold,
+            ROUND(AVG(
+                CASE WHEN m.duration IS NOT NULL AND p.gold_earned IS NOT NULL
+                THEN p.gold_earned / (
+                    CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS REAL)
+                    + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
+                )
+                END
+            ), 0) as avg_gpm
+        FROM match_players p
+        JOIN matches m ON p.match_id = m.id
+        WHERE p.team = 'ours'{extra_where}
+        GROUP BY p.role
+        ORDER BY p.role
+    """
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["kda"] = round(
+            (r["avg_kills"] + r["avg_assists"]) / max(r["avg_deaths"], 1), 2
+        )
+        result.append(r)
+    return result
+
+
+def get_all_champions_by_role(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Stats per champion per role for ALL teams (ours + theirs)."""
+    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    query = f"""
+        SELECT
+            p.role,
+            p.champion,
+            COUNT(*) as games,
+            SUM(CASE
+                WHEN p.team = 'ours' AND m.result = 'win' THEN 1
+                WHEN p.team = 'theirs' AND m.result = 'loss' THEN 1
+                ELSE 0
+            END) as wins,
+            ROUND(AVG(p.kills), 1) as avg_kills,
+            ROUND(AVG(p.deaths), 1) as avg_deaths,
+            ROUND(AVG(p.assists), 1) as avg_assists,
+            ROUND(AVG(p.kp_percent), 1) as avg_kp,
+            ROUND(AVG(
+                CASE WHEN m.duration IS NOT NULL AND p.gold_earned IS NOT NULL
+                THEN p.gold_earned / (
+                    CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS REAL)
+                    + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
+                )
+                END
+            ), 0) as avg_gpm
+        FROM match_players p
+        JOIN matches m ON p.match_id = m.id
+        WHERE 1=1{extra_where}
+        GROUP BY p.role, p.champion
+        ORDER BY p.role, games DESC
+    """
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    result: dict[str, list[dict]] = {}
+    for row in rows:
+        r = dict(row)
+        r["winrate"] = round(r["wins"] / r["games"] * 100, 1) if r["games"] > 0 else 0
+        r["kda"] = round(
+            (r["avg_kills"] + r["avg_assists"]) / max(r["avg_deaths"], 1), 2
+        )
+        role = r.pop("role")
+        result.setdefault(role, []).append(r)
+    return result
+
+
 def get_champion_stats(
     opponent: str | None = None,
     date_from: str | None = None,
@@ -635,3 +736,49 @@ def get_pick_priority(
         d["winrate"] = round(d["wins"] / d["games"] * 100, 1) if d["games"] > 0 else 0
         result.append(d)
     return result
+
+
+# ---------- Team Rosters ---------- #
+
+
+def upsert_team_roster(team_name: str, players: list[str]) -> None:
+    """Replace all players for a team."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM team_rosters WHERE team_name = ?", (team_name,))
+        for nick in players:
+            nick = nick.strip()
+            if nick:
+                conn.execute(
+                    "INSERT INTO team_rosters (team_name, player_nick) VALUES (?, ?)",
+                    (team_name, nick),
+                )
+        conn.commit()
+
+
+def get_all_rosters() -> dict[str, list[str]]:
+    """Return {team_name: [player_nick, ...]}."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT team_name, player_nick FROM team_rosters ORDER BY team_name, player_nick"
+        ).fetchall()
+    result: dict[str, list[str]] = {}
+    for r in rows:
+        result.setdefault(r["team_name"], []).append(r["player_nick"])
+    return result
+
+
+def find_teams_by_players(nicks: list[str]) -> list[tuple[str, int]]:
+    """Find teams matching given player nicks. Returns [(team_name, match_count)] sorted by matches desc."""
+    if not nicks:
+        return []
+    placeholders = ",".join("?" for _ in nicks)
+    query = f"""
+        SELECT team_name, COUNT(*) as matches
+        FROM team_rosters
+        WHERE LOWER(player_nick) IN ({placeholders})
+        GROUP BY team_name
+        ORDER BY matches DESC
+    """
+    with _connect() as conn:
+        rows = conn.execute(query, [n.lower() for n in nicks]).fetchall()
+    return [(r["team_name"], r["matches"]) for r in rows]
