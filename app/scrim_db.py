@@ -479,6 +479,54 @@ def get_all_champions_by_role(
     return result
 
 
+def get_all_champions_general(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> list[dict[str, Any]]:
+    """Stats per champion across ALL roles and ALL teams (general tier list)."""
+    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    query = f"""
+        SELECT
+            p.champion,
+            COUNT(*) as games,
+            SUM(CASE
+                WHEN p.team = 'ours' AND m.result = 'win' THEN 1
+                WHEN p.team = 'theirs' AND m.result = 'loss' THEN 1
+                ELSE 0
+            END) as wins,
+            ROUND(AVG(p.kills), 1) as avg_kills,
+            ROUND(AVG(p.deaths), 1) as avg_deaths,
+            ROUND(AVG(p.assists), 1) as avg_assists,
+            ROUND(AVG(p.kp_percent), 1) as avg_kp,
+            ROUND(AVG(
+                CASE WHEN m.duration IS NOT NULL AND p.gold_earned IS NOT NULL
+                THEN p.gold_earned / (
+                    CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS REAL)
+                    + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
+                )
+                END
+            ), 0) as avg_gpm
+        FROM match_players p
+        JOIN matches m ON p.match_id = m.id
+        WHERE 1=1{extra_where}
+        GROUP BY p.champion
+        ORDER BY games DESC
+    """
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["winrate"] = round(r["wins"] / r["games"] * 100, 1) if r["games"] > 0 else 0
+        r["kda"] = round(
+            (r["avg_kills"] + r["avg_assists"]) / max(r["avg_deaths"], 1), 2
+        )
+        result.append(r)
+    return result
+
+
 def get_champion_stats(
     opponent: str | None = None,
     date_from: str | None = None,

@@ -915,16 +915,18 @@
     const params = buildFilterParams("sf");
     const body = document.getElementById("statsBody");
     try {
-      const [statsRes, roleAvgRes, allChampsRes] = await Promise.all([
+      const [statsRes, roleAvgRes, allChampsRes, generalRes] = await Promise.all([
         fetch("/api/scrims/stats?" + params.toString()),
         fetch("/api/scrims/role-averages?" + params.toString()),
         fetch("/api/scrims/all-champions-by-role?" + params.toString()),
+        fetch("/api/scrims/all-champions-general?" + params.toString()),
       ]);
       if (!statsRes.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
       const data = await statsRes.json();
       const roleAvg = roleAvgRes.ok ? await roleAvgRes.json() : [];
       const allChamps = allChampsRes.ok ? await allChampsRes.json() : {};
-      renderStatsBody(data, body, roleAvg, allChamps);
+      const generalChamps = generalRes.ok ? await generalRes.json() : [];
+      renderStatsBody(data, body, roleAvg, allChamps, generalChamps);
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
@@ -983,13 +985,43 @@
     return html;
   }
 
+  function renderGeneralTierList(champList, title) {
+    title = title || "Tier List Geral";
+    if (!champList.length) return "";
+    const maxGames = Math.max(...champList.map((c) => c.games));
+    const scored = champList.map((c) => ({
+      ...c,
+      tierScore: computeTierScore(c, maxGames),
+    }));
+    scored.sort((a, b) => b.tierScore - a.tierScore);
+
+    const tiers = { S: [], A: [], B: [], C: [], D: [] };
+    for (const c of scored) {
+      tiers[getTierLabel(c.tierScore)].push(c);
+    }
+
+    let html = `<div class="tier-lists"><h2 style="margin-bottom:0.75rem">${escHtml(title)}</h2>`;
+    for (const [label, champs] of Object.entries(tiers)) {
+      if (!champs.length) continue;
+      html += `<div class="tier-row tier-${label.toLowerCase()}">
+        <span class="tier-label">${label}</span>
+        <div class="tier-champs">
+          ${champs.map((c) => `<span class="tier-champ" title="${escHtml(c.champion)} — ${c.games}g | ${c.winrate}% WR | ${c.kda} KDA${c.avg_gpm ? " | " + c.avg_gpm + " GPM" : ""} (score: ${(c.tierScore * 100).toFixed(0)})">${champAvatarHtml(c.champion, 30)}</span>`).join("")}
+        </div>
+      </div>`;
+    }
+    html += "</div>";
+    return html;
+  }
+
   const ROLE_LABELS = { top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot", support: "Support" };
 
-  function renderStatsBody(data, container, roleAvg, allChamps) {
+  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps) {
     const ov = data.overall || {};
     const roles = data.roles || {};
     roleAvg = roleAvg || [];
     allChamps = allChamps || {};
+    generalChamps = generalChamps || [];
 
     let html = `
       <div class="overall-banner">
@@ -1029,12 +1061,17 @@
       html += "</div>";
     }
 
-    // Tier list by role (our team)
-    html += renderTierList(roles);
+    // General tier list (all champions, all roles)
+    if (generalChamps.length) {
+      html += renderGeneralTierList(generalChamps, "Tier List Geral");
+    }
 
-    // Tier list geral (all champions)
+    // Tier list by role (our team)
+    html += renderTierList(roles, "Tier List por Rota (Nosso Time)");
+
+    // Tier list by role (all champions)
     if (Object.keys(allChamps).length) {
-      html += renderTierList(allChamps, "Tier List Geral (Todos os Campeoes)");
+      html += renderTierList(allChamps, "Tier List por Rota (Todos)");
     }
 
     html += '<div class="stats-grid">';

@@ -133,6 +133,16 @@ def _with_champion_lang(rows: list[dict], name_lang: NameLang) -> list[dict]:
     return localized
 
 
+def _force_refresh_cn(role: Role, tier: Tier) -> tuple[list[dict] | None, str | None]:
+    """Bypass cache and fetch fresh data from CN API."""
+    logger.info("Force-refreshing CN data for tier=%s role=%s", tier, role)
+    payload = fetch_cn_payload(tier=tier)
+    hero_map = fetch_hero_map_from_gtimg(force_refresh=True)
+    rows = build_cn_rows_from_payload(payload=payload, role=role, tier=tier, hero_map=hero_map)
+    update_cache(tier=tier, source_url=CN_PAGE_URL, raw_payload=payload)
+    return rows, "cn_fresh"
+
+
 def _load_cn_with_cache(role: Role, tier: Tier) -> tuple[list[dict] | None, str | None]:
     cached_rows = get_cached_meta(role=role, tier=tier)
     if cached_rows:
@@ -171,6 +181,7 @@ def meta(
     view: View = "draft",
     sort: SortField | None = None,
     dir: SortDir = "desc",
+    refresh: str | None = None,
 ) -> dict[str, Any]:
     sort_field: SortField = sort or ("draft_score" if view == "draft" else "power_score")
 
@@ -180,7 +191,10 @@ def meta(
 
     if source == "cn":
         try:
-            cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
+            if refresh == "force":
+                cn_rows, used_source = _force_refresh_cn(role=role, tier=tier)
+            else:
+                cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
             if not cn_rows:
                 raise RuntimeError("CN source returned empty data")
             selected_position = {"top": 2, "jungle": 5, "mid": 1, "adc": 3, "support": 4}[role]
@@ -205,7 +219,10 @@ def meta(
 
     warning = ""
     try:
-        cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
+        if refresh == "force":
+            cn_rows, used_source = _force_refresh_cn(role=role, tier=tier)
+        else:
+            cn_rows, used_source = _load_cn_with_cache(role=role, tier=tier)
         if cn_rows:
             selected_position = {"top": 2, "jungle": 5, "mid": 1, "adc": 3, "support": 4}[role]
             preview = [

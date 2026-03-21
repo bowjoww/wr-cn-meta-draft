@@ -257,9 +257,11 @@
           <div class="view-tabs">
             <button id="tabDraft" class="view-tab active" data-view="draft">Draft Priority</button>
             <button id="tabPower" class="view-tab" data-view="power">Power (PBI-like)</button>
+            <button id="tabTier" class="view-tab" data-view="tier">Tier List</button>
           </div>
 
-          <div class="meta-table-wrap">
+          <div id="tierListView" style="display:none"></div>
+          <div class="meta-table-wrap" id="metaTableWrap">
             <table>
               <thead>
                 <tr>
@@ -288,10 +290,15 @@
             const cnTimestamp = document.getElementById("cnTimestamp");
             const tabDraft = document.getElementById("tabDraft");
             const tabPower = document.getElementById("tabPower");
+            const tabTier = document.getElementById("tabTier");
             const scoreHeader = document.getElementById("scoreHeader");
             const sortableHeaders = document.querySelectorAll("th.sortable");
             const warningBanner = document.getElementById("warningBanner");
             const forceRefreshBtn = document.getElementById("forceRefresh");
+            const tierListView = document.getElementById("tierListView");
+            const metaTableWrap = document.getElementById("metaTableWrap");
+
+            let lastLoadedItems = [];
 
             const state = {
               view: "draft",
@@ -310,6 +317,9 @@
             function updateTabs() {
               tabDraft.classList.toggle("active", state.view === "draft");
               tabPower.classList.toggle("active", state.view === "power");
+              tabTier.classList.toggle("active", state.view === "tier");
+              metaTableWrap.style.display = state.view === "tier" ? "none" : "";
+              tierListView.style.display = state.view === "tier" ? "" : "none";
             }
 
             function labelForSort(sortKey) {
@@ -332,6 +342,44 @@
                 const arrow = isActive ? (state.dir === "asc" ? " \u2191" : " \u2193") : "";
                 header.textContent = `${labelForSort(key)}${arrow}`;
               });
+            }
+
+            function renderMetaTierList(items) {
+              if (!items.length) { tierListView.innerHTML = '<p style="color:#999">Sem dados</p>'; return; }
+              // Score based on draft_score (already computed by backend)
+              const scored = items.map(item => ({
+                ...item,
+                score: item.draft_score ?? item.priority_score ?? 0,
+              }));
+              scored.sort((a, b) => b.score - a.score);
+
+              // Percentile-based tiers
+              const len = scored.length;
+              const tiers = { S: [], A: [], B: [], C: [], D: [] };
+              scored.forEach((item, i) => {
+                const pctile = i / len;
+                const tier = pctile < 0.10 ? "S" : pctile < 0.25 ? "A" : pctile < 0.50 ? "B" : pctile < 0.75 ? "C" : "D";
+                tiers[tier].push(item);
+              });
+
+              const tierColors = { S: "#f59e0b", A: "#22d3ee", B: "#10b981", C: "#6b7280", D: "#ef4444" };
+              let html = "";
+              for (const [label, champs] of Object.entries(tiers)) {
+                if (!champs.length) continue;
+                html += `<div style="display:flex;align-items:stretch;margin-bottom:2px;min-height:48px">
+                  <div style="min-width:40px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.2rem;background:${tierColors[label]}22;color:${tierColors[label]};border-left:3px solid ${tierColors[label]};padding:6px">${label}</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;align-items:center;flex:1;background:var(--surface-raised, #1a2332)">
+                    ${champs.map(c => {
+                      const name = c.champion || "?";
+                      const av = c.avatar_url ? `<img src="${c.avatar_url}" alt="${name}" style="width:32px;height:32px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">` : "";
+                      return `<div title="${name} — WR: ${pct(c.winrate)} | Pick: ${pct(c.pickrate)} | Ban: ${pct(c.banrate)} | Score: ${c.score.toFixed(3)}" style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:42px">
+                        ${av}<span style="font-size:0.6rem;color:#94a3b8;max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+                      </div>`;
+                    }).join("")}
+                  </div>
+                </div>`;
+              }
+              tierListView.innerHTML = html;
             }
 
             function champCell(item) {
@@ -411,7 +459,9 @@
                   throw new Error("Falha ao carregar dados");
                 }
                 const data = await response.json();
+                lastLoadedItems = data.items;
                 render(data.items);
+                if (state.view === "tier") renderMetaTierList(data.items);
                 sourceLabel.textContent = `Fonte: ${data.source}`;
                 cnTimestamp.textContent = formatCnTimestamp(data.last_fetch);
                 message.textContent = `Mostrando ${data.items.length} campe\u00f5es \u00b7 ordenado por ${labelForSort(state.sort)} (${state.dir})`;
@@ -435,7 +485,11 @@
               }
               updateTabs();
               updateHeaders();
-              loadMeta();
+              if (view === "tier" && lastLoadedItems.length) {
+                renderMetaTierList(lastLoadedItems);
+              } else {
+                loadMeta();
+              }
             }
 
             function onSortClick(header) {
@@ -452,6 +506,7 @@
 
             tabDraft.addEventListener("click", () => setView("draft"));
             tabPower.addEventListener("click", () => setView("power"));
+            tabTier.addEventListener("click", () => setView("tier"));
             loadButton.addEventListener("click", () => loadMeta());
             forceRefreshBtn.addEventListener("click", () => {
               forceRefreshBtn.disabled = true;

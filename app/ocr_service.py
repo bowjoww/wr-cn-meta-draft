@@ -48,11 +48,13 @@ Rules:
 - Gold earned: look for a number near each player (often labeled "Patrimônio Líquido", "Ouro Total", or just a plain number like 8945 or 11.7k). This is the total gold earned by that player. Convert "k" values to full numbers (e.g., 11.7k = 11700). Always return as an integer.
 - The MVP badge (crown/star icon) appears on the best player of the winning team; set is_mvp=true for that player
 - The SVP badge appears on the best player of the losing team; set is_svp=true for that player
-- Use English champion names (e.g., "Garen" not "盖伦"). If you cannot identify a champion, use null instead of a placeholder like "Champion Name"
+- Use English champion names (e.g., "Garen" not "盖伦"). If you cannot identify a champion, use null — NEVER use "Champion Name", "Unknown", or any placeholder text
+- Common name mappings: MonkeyKing → Wukong, Xin Zhao (not Zhao Yun), Nunu & Willump → Nunu
 - If the screenshot says "VITÓRIA" (victory), the team shown prominently won
 - "Equipe Azul" = Blue Team, "Equipe Vermelha" = Red Team
 - Return ONLY the JSON, no markdown or extra text
-- Extract player nicknames/summoner names shown next to each champion portrait. These are the in-game names of the players.
+- Extract player nicknames/summoner names shown next to or above each champion portrait. These appear as text like "PlayerName#TAG". Include the full name with tag if visible.
+- Game duration (MM:SS format) is in the top-left area of the screen, typically below the game mode name (e.g., "ALTERNADA PARA TORNEIOS", "ESCOLHAS ÀS CEGAS") and near the "Wild Rift" text
 - If you cannot determine a field, use null (do NOT guess or use placeholder text)
 {champion_list_instruction}
 """

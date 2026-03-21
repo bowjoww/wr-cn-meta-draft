@@ -14,6 +14,7 @@ from app.scrim_db import (
     delete_match,
     find_teams_by_players,
     get_all_champions_by_role,
+    get_all_champions_general,
     get_all_rosters,
     get_champion_stats,
     get_duos,
@@ -326,6 +327,18 @@ def api_all_champions_by_role(
     patch: str | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     return get_all_champions_by_role(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+    )
+
+
+@router.get("/api/scrims/all-champions-general")
+def api_all_champions_general(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> list[dict[str, Any]]:
+    return get_all_champions_general(
         opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
     )
 
