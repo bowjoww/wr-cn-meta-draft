@@ -816,17 +816,55 @@ def get_all_rosters() -> dict[str, list[str]]:
 
 
 def find_teams_by_players(nicks: list[str]) -> list[tuple[str, int]]:
-    """Find teams matching given player nicks. Returns [(team_name, match_count)] sorted by matches desc."""
+    """Find teams matching given player nicks. Returns [(team_name, match_count)] sorted by matches desc.
+
+    Matching strategy (in order):
+    1. Exact match (case-insensitive)
+    2. Match without #TAG (e.g. "Dokja" matches "Dokja#123")
+    3. Nick contains or is contained in roster entry (partial match)
+    """
     if not nicks:
         return []
-    placeholders = ",".join("?" for _ in nicks)
-    query = f"""
-        SELECT team_name, COUNT(*) as matches
-        FROM team_rosters
-        WHERE LOWER(player_nick) IN ({placeholders})
-        GROUP BY team_name
-        ORDER BY matches DESC
-    """
+
+    # Load all rosters
     with _connect() as conn:
-        rows = conn.execute(query, [n.lower() for n in nicks]).fetchall()
-    return [(r["team_name"], r["matches"]) for r in rows]
+        all_rows = conn.execute(
+            "SELECT team_name, player_nick FROM team_rosters"
+        ).fetchall()
+
+    if not all_rows:
+        return []
+
+    # Build lookup: team -> set of normalized nicks (with and without tag)
+    from collections import Counter
+    team_matches: Counter[str] = Counter()
+
+    # Normalize input nicks
+    input_nicks = [n.strip().lower() for n in nicks if n and n.strip()]
+    # Also strip #TAG from input nicks
+    input_nicks_base = []
+    for n in input_nicks:
+        input_nicks_base.append(n.split("#")[0].strip() if "#" in n else n)
+
+    for row in all_rows:
+        team = row["team_name"]
+        roster_nick = row["player_nick"].strip().lower()
+        roster_base = roster_nick.split("#")[0].strip() if "#" in roster_nick else roster_nick
+
+        for i, inp in enumerate(input_nicks):
+            inp_base = input_nicks_base[i]
+            # Exact match (full nick with tag)
+            if inp == roster_nick:
+                team_matches[team] += 1
+                break
+            # Base name match (without #TAG)
+            if inp_base and roster_base and inp_base == roster_base:
+                team_matches[team] += 1
+                break
+            # Partial match: input contains roster base or vice versa (min 3 chars)
+            if len(inp_base) >= 3 and len(roster_base) >= 3:
+                if inp_base in roster_base or roster_base in inp_base:
+                    team_matches[team] += 1
+                    break
+
+    return team_matches.most_common()
