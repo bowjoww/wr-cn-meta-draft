@@ -18,6 +18,7 @@ from app.scrim_db import (
     get_all_rosters,
     get_champion_stats,
     get_duos,
+    get_enemy_champions_by_role,
     get_match,
     get_matchups,
     get_mvp_svp_summary,
@@ -340,6 +341,18 @@ def api_all_champions_by_role(
     patch: str | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     return get_all_champions_by_role(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+    )
+
+
+@router.get("/api/scrims/enemy-champions-by-role")
+def api_enemy_champions_by_role(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    return get_enemy_champions_by_role(
         opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
     )
 

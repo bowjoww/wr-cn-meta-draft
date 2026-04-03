@@ -922,12 +922,13 @@
     const params = buildFilterParams("sf");
     const body = document.getElementById("statsBody");
     try {
-      const [statsRes, roleAvgRes, allChampsRes, generalRes, mvpSvpRes] = await Promise.all([
+      const [statsRes, roleAvgRes, allChampsRes, generalRes, mvpSvpRes, enemyChampsRes] = await Promise.all([
         fetch("/api/scrims/stats?" + params.toString()),
         fetch("/api/scrims/role-averages?" + params.toString()),
         fetch("/api/scrims/all-champions-by-role?" + params.toString()),
         fetch("/api/scrims/all-champions-general?" + params.toString()),
         fetch("/api/scrims/mvp-svp?" + params.toString()),
+        fetch("/api/scrims/enemy-champions-by-role?" + params.toString()),
       ]);
       if (!statsRes.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
       const data = await statsRes.json();
@@ -935,7 +936,8 @@
       const allChamps = allChampsRes.ok ? await allChampsRes.json() : {};
       const generalChamps = generalRes.ok ? await generalRes.json() : [];
       const mvpSvp = mvpSvpRes.ok ? await mvpSvpRes.json() : {};
-      renderStatsBody(data, body, roleAvg, allChamps, generalChamps, mvpSvp);
+      const enemyChamps = enemyChampsRes.ok ? await enemyChampsRes.json() : {};
+      renderStatsBody(data, body, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps);
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
@@ -1025,13 +1027,14 @@
 
   const ROLE_LABELS = { top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot", support: "Support" };
 
-  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps, mvpSvp) {
+  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps) {
     const ov = data.overall || {};
     const roles = data.roles || {};
     roleAvg = roleAvg || [];
     allChamps = allChamps || {};
     generalChamps = generalChamps || [];
     mvpSvp = mvpSvp || {};
+    enemyChamps = enemyChamps || {};
 
     let html = `
       <div class="overall-banner">
@@ -1130,6 +1133,11 @@
     // Tier list by role (all champions)
     if (Object.keys(allChamps).length) {
       html += renderTierList(allChamps, "Tier List por Rota (Todos)");
+    }
+
+    // Enemy team tier list by role
+    if (Object.keys(enemyChamps).length) {
+      html += renderTierList(enemyChamps, "Tier List por Rota (Time Inimigo)");
     }
 
     html += '<div class="stats-grid">';
