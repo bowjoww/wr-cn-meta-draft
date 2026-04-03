@@ -208,6 +208,7 @@
         </div>
         <nav class="top-nav">
           <button id="navMeta" class="active" onclick="switchSection('meta')">Meta Viewer</button>
+          <button id="navOpenSeries" onclick="switchSection('openseries')">Open Series</button>
           <button id="navScrim" style="display:none" onclick="switchSection('scrim')">Scrim Tracker</button>
           <button id="navPlayer" style="display:none" onclick="switchSection('player')">Player Tracker</button>
         </nav>
@@ -548,6 +549,31 @@
           </div>
           <div id="playerContent"></div>
         </section>
+
+        <section id="openseriesSection" style="display:none">
+          <div class="section-header">
+            <h1>Open Series Meta</h1>
+            <span class="section-tag">BR COMPETITIVE DATA</span>
+          </div>
+          <div id="osSourceBanner" class="source-banner" style="margin-bottom:0.5rem;">Fonte: openseries.com.br</div>
+          <div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+            <input id="osSearch" type="text" placeholder="Buscar campeão..." style="background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.7rem;font-family:var(--font-mono);font-size:0.85rem;min-width:180px;">
+            <select id="osSortField" style="background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;font-family:var(--font-mono);font-size:0.82rem;">
+              <option value="pick_rate">Pick Rate</option>
+              <option value="ban_rate">Ban Rate</option>
+              <option value="win_rate">Win Rate</option>
+              <option value="kda">KDA</option>
+              <option value="avg_gold">Gold Médio</option>
+              <option value="champion">Nome</option>
+            </select>
+            <select id="osSortDir" style="background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;font-family:var(--font-mono);font-size:0.82rem;">
+              <option value="desc">↓ Desc</option>
+              <option value="asc">↑ Asc</option>
+            </select>
+            <button onclick="loadOpenSeries(true)" style="background:var(--accent-dim);color:var(--text-primary);border:1px solid var(--accent);border-radius:4px;padding:0.4rem 0.8rem;font-family:var(--font-heading);font-size:0.8rem;font-weight:700;cursor:pointer;letter-spacing:0.04em;">↺ ATUALIZAR</button>
+          </div>
+          <div id="osContent" style="overflow-x:auto;"></div>
+        </section>
       </main>
     </div>
 
@@ -619,11 +645,13 @@
         const metaEl = document.getElementById('metaSection');
         const scrimEl = document.getElementById('scrimSection');
         const playerEl = document.getElementById('playerSection');
+        const osEl = document.getElementById('openseriesSection');
 
         document.querySelectorAll('.top-nav button').forEach(b => b.classList.remove('active'));
         metaEl.style.display = 'none';
         scrimEl.style.display = 'none';
         playerEl.style.display = 'none';
+        osEl.style.display = 'none';
 
         if (section === 'scrim') {
           scrimEl.style.display = '';
@@ -633,6 +661,10 @@
           playerEl.style.display = '';
           document.getElementById('navPlayer').classList.add('active');
           window.initPlayer();
+        } else if (section === 'openseries') {
+          osEl.style.display = '';
+          document.getElementById('navOpenSeries').classList.add('active');
+          initOpenSeries();
         } else {
           metaEl.style.display = '';
           document.getElementById('navMeta').classList.add('active');
@@ -933,6 +965,116 @@
 
       // Check auth on load
       checkAuth().then(updateNav);
+
+      // ============================================================
+      // Open Series Meta
+      // ============================================================
+      let osData = null;
+      let osInited = false;
+
+      function initOpenSeries() {
+        if (osInited) { renderOpenSeries(); return; }
+        loadOpenSeries(false);
+      }
+
+      async function loadOpenSeries(forceRefresh) {
+        const content = document.getElementById('osContent');
+        const banner = document.getElementById('osSourceBanner');
+        content.innerHTML = '<p style="color:var(--text-muted)">Carregando dados da Open Series...</p>';
+
+        try {
+          const url = forceRefresh ? '/openseries?refresh=force' : '/openseries';
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          osData = data.champions || [];
+          osInited = true;
+
+          if (data.last_fetch) {
+            const d = new Date(data.last_fetch);
+            banner.textContent = `Última atualização: ${d.toLocaleString('pt-BR')} • ${data.total} campeões`;
+          } else {
+            banner.textContent = `Fonte: openseries.com.br • ${data.total} campeões`;
+          }
+
+          renderOpenSeries();
+        } catch (err) {
+          content.innerHTML = `<p style="color:var(--red)">Erro ao carregar dados: ${err.message}</p>`;
+        }
+      }
+
+      function renderOpenSeries() {
+        if (!osData) return;
+        const content = document.getElementById('osContent');
+        const search = (document.getElementById('osSearch')?.value || '').toLowerCase();
+        const sortField = document.getElementById('osSortField')?.value || 'pick_rate';
+        const sortDir = document.getElementById('osSortDir')?.value || 'desc';
+
+        let rows = osData.filter(c => !search || c.champion.toLowerCase().includes(search));
+
+        rows.sort((a, b) => {
+          let va = a[sortField], vb = b[sortField];
+          if (typeof va === 'string') {
+            return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+          }
+          return sortDir === 'asc' ? va - vb : vb - va;
+        });
+
+        function pct(v) { return (v * 100).toFixed(1) + '%'; }
+        function winColor(v) {
+          if (v >= 0.55) return 'var(--green)';
+          if (v <= 0.45) return 'var(--red)';
+          return 'var(--text-primary)';
+        }
+
+        let html = `<table class="data-table" style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+          <thead><tr>
+            <th style="text-align:left;padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);">#</th>
+            <th style="text-align:left;padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);">CAMPEÃO</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">PICKS</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">PICK%</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">BANS</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">BAN%</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">WIN%</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">KDA</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">K/D/A</th>
+            <th style="padding:0.5rem 0.7rem;color:var(--text-muted);font-size:0.75rem;border-bottom:1px solid var(--border);text-align:center;">GOLD MÉD.</th>
+          </tr></thead><tbody>`;
+
+        rows.forEach((c, i) => {
+          const kda = c.avg_kills && c.avg_deaths
+            ? `${c.avg_kills.toFixed(1)}/${c.avg_deaths.toFixed(1)}/${c.avg_assists.toFixed(1)}`
+            : '—';
+          const gold = c.avg_gold ? c.avg_gold.toLocaleString('pt-BR') : '—';
+          const presence = ((c.pick_rate + c.ban_rate) * 100).toFixed(1);
+          html += `<tr style="border-bottom:1px solid var(--border);transition:background 0.1s;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+            <td style="padding:0.45rem 0.7rem;color:var(--text-muted);font-size:0.75rem;">${i + 1}</td>
+            <td style="padding:0.45rem 0.7rem;font-weight:600;">${c.champion}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;">${c.picks}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;color:#8B5CF6;">${pct(c.pick_rate)}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;">${c.bans}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;color:var(--text-secondary);">${pct(c.ban_rate)}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;font-weight:700;color:${winColor(c.win_rate)};">${pct(c.win_rate)}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;color:#10B981;">${c.kda ? c.kda.toFixed(2) : '—'}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;font-family:var(--font-mono);font-size:0.8rem;">${kda}</td>
+            <td style="padding:0.45rem 0.7rem;text-align:center;color:#F59E0B;">${gold}</td>
+          </tr>`;
+        });
+
+        html += `</tbody></table>`;
+        if (rows.length === 0) {
+          html = '<p style="color:var(--text-muted)">Nenhum campeão encontrado.</p>';
+        }
+        content.innerHTML = html;
+      }
+
+      // Wire up live search and sort controls
+      document.addEventListener('DOMContentLoaded', () => {
+        ['osSearch', 'osSortField', 'osSortDir'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.addEventListener('input', () => { if (osInited) renderOpenSeries(); });
+        });
+      });
     </script>
   </body>
 </html>

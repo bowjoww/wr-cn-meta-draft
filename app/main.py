@@ -25,11 +25,24 @@ from app.fetch_cn_meta import (
     update_cache,
 )
 from app.scoring import EPSILON, power_score, priority_score, zscore
+from app.fetch_openseries import (
+    OPENSERIES_URL,
+    cache_age_seconds as os_cache_age_seconds,
+    get_openseries_data,
+    get_openseries_map,
+    is_cache_fresh as os_cache_fresh,
+    read_cache as os_read_cache,
+)
+from app.auth_db import init_auth_db
+from app.auth_routes import router as auth_router
+from app.player_routes import router as player_router, init_player_db
 from app.scrim_db import init_db
 from app.scrim_routes import router as scrim_router
 
 app = FastAPI(title="WR CN Meta Viewer")
 app.include_router(scrim_router)
+app.include_router(auth_router)
+app.include_router(player_router)
 logger = logging.getLogger(__name__)
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_cn_meta.json"
@@ -42,6 +55,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    init_auth_db()
+    init_player_db()
 
 Role = Literal["top", "jungle", "mid", "adc", "support"]
 Tier = Literal["diamond_plus", "master", "monarch", "rift_peak"]
@@ -167,6 +182,11 @@ def index() -> FileResponse:
     return FileResponse(STATIC_INDEX_PATH)
 
 
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -289,3 +309,48 @@ def meta_debug_cn_positions(tier: Tier) -> dict[str, dict | str]:
         return summary
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"CN source unavailable: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Open Series endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/openseries")
+def openseries_champions(refresh: str | None = None) -> dict[str, Any]:
+    """Return all champion stats scraped from openseries.com.br/campeoes/."""
+    try:
+        force = refresh == "force"
+        champions = get_openseries_data(force_refresh=force)
+        cache = os_read_cache()
+        return {
+            "champions": champions,
+            "total": len(champions),
+            "last_fetch": cache.get("fetched_at") if cache else None,
+            "source_url": OPENSERIES_URL,
+            "cache_fresh": os_cache_fresh(cache) if cache else False,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Open Series source unavailable: {exc}") from exc
+
+
+@app.get("/openseries/source")
+def openseries_source() -> dict[str, Any]:
+    """Return cache status for Open Series data."""
+    cache = os_read_cache()
+    if not cache:
+        return {
+            "available": False,
+            "last_fetch": None,
+            "cache_age_seconds": None,
+            "cache_fresh": False,
+            "total": 0,
+        }
+    age = os_cache_age_seconds(cache)
+    return {
+        "available": True,
+        "last_fetch": cache.get("fetched_at"),
+        "cache_age_seconds": int(age),
+        "cache_fresh": os_cache_fresh(cache),
+        "total": len(cache.get("champions", [])),
+        "source_url": OPENSERIES_URL,
+    }
