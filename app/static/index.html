@@ -208,8 +208,15 @@
         </div>
         <nav class="top-nav">
           <button id="navMeta" class="active" onclick="switchSection('meta')">Meta Viewer</button>
-          <button id="navScrim" onclick="switchSection('scrim')">Scrim Tracker</button>
+          <button id="navScrim" style="display:none" onclick="switchSection('scrim')">Scrim Tracker</button>
+          <button id="navPlayer" style="display:none" onclick="switchSection('player')">Player Tracker</button>
         </nav>
+        <div id="userArea" style="margin-left:auto;display:flex;align-items:center;gap:0.6rem;font-size:0.82rem;font-family:var(--font-mono);">
+          <span id="userInfo" style="color:var(--text-secondary);display:none;"></span>
+          <span id="userPlan" style="display:none;font-size:0.7rem;padding:0.15rem 0.45rem;border-radius:3px;font-weight:600;letter-spacing:0.04em;"></span>
+          <a id="loginBtn" href="/login" style="color:var(--accent);text-decoration:none;font-weight:600;">Login</a>
+          <button id="logoutBtn" style="display:none;background:none;border:1px solid var(--border);color:var(--text-muted);padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-family:var(--font-mono);font-size:0.78rem;" onclick="doLogout()">Sair</button>
+        </div>
       </header>
 
       <main class="app-main">
@@ -533,30 +540,399 @@
           <div class="scrim-tabs" id="scrimSubTabs"></div>
           <div id="scrimContent"></div>
         </section>
+
+        <section id="playerSection" style="display:none">
+          <div class="section-header">
+            <h1>Player Tracker</h1>
+            <span class="section-tag">PERSONAL STATS</span>
+          </div>
+          <div id="playerContent"></div>
+        </section>
       </main>
     </div>
 
     <script src="/static/scrim.js"></script>
     <script>
+      let currentUser = null;
+
+      const PLAN_COLORS = {
+        free: { bg: 'rgba(100,116,139,0.2)', color: '#94a3b8' },
+        player: { bg: 'rgba(34,211,238,0.15)', color: '#22d3ee' },
+        coach: { bg: 'rgba(74,222,128,0.15)', color: '#4ade80' },
+        owner: { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24' },
+      };
+
+      async function checkAuth() {
+        try {
+          const res = await fetch('/api/auth/me');
+          if (!res.ok) return null;
+          const data = await res.json();
+          return data.user;
+        } catch { return null; }
+      }
+
+      function updateNav(user) {
+        currentUser = user;
+        const navScrim = document.getElementById('navScrim');
+        const navPlayer = document.getElementById('navPlayer');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const userInfo = document.getElementById('userInfo');
+        const userPlan = document.getElementById('userPlan');
+
+        if (user) {
+          loginBtn.style.display = 'none';
+          logoutBtn.style.display = '';
+          userInfo.style.display = '';
+          userInfo.textContent = user.display_name;
+          userPlan.style.display = '';
+          userPlan.textContent = user.plan.toUpperCase();
+          const pc = PLAN_COLORS[user.plan] || PLAN_COLORS.free;
+          userPlan.style.background = pc.bg;
+          userPlan.style.color = pc.color;
+
+          if (user.plan === 'coach' || user.plan === 'owner') {
+            navScrim.style.display = '';
+            navPlayer.style.display = '';
+          }
+          if (user.plan === 'player') {
+            navPlayer.style.display = '';
+          }
+        } else {
+          loginBtn.style.display = '';
+          logoutBtn.style.display = 'none';
+          userInfo.style.display = 'none';
+          userPlan.style.display = 'none';
+          navScrim.style.display = 'none';
+          navPlayer.style.display = 'none';
+        }
+      }
+
+      async function doLogout() {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        currentUser = null;
+        updateNav(null);
+        switchSection('meta');
+      }
+
       function switchSection(section) {
         const metaEl = document.getElementById('metaSection');
         const scrimEl = document.getElementById('scrimSection');
-        const navMeta = document.getElementById('navMeta');
-        const navScrim = document.getElementById('navScrim');
+        const playerEl = document.getElementById('playerSection');
 
-        if (section === 'meta') {
-          metaEl.style.display = '';
-          scrimEl.style.display = 'none';
-          navMeta.classList.add('active');
-          navScrim.classList.remove('active');
-        } else {
-          metaEl.style.display = 'none';
+        document.querySelectorAll('.top-nav button').forEach(b => b.classList.remove('active'));
+        metaEl.style.display = 'none';
+        scrimEl.style.display = 'none';
+        playerEl.style.display = 'none';
+
+        if (section === 'scrim') {
           scrimEl.style.display = '';
-          navMeta.classList.remove('active');
-          navScrim.classList.add('active');
+          document.getElementById('navScrim').classList.add('active');
           window.initScrim();
+        } else if (section === 'player') {
+          playerEl.style.display = '';
+          document.getElementById('navPlayer').classList.add('active');
+          window.initPlayer();
+        } else {
+          metaEl.style.display = '';
+          document.getElementById('navMeta').classList.add('active');
         }
       }
+
+      // ============================================================
+      // Player Tracker
+      // ============================================================
+      let playerInited = false;
+
+      window.initPlayer = function () {
+        if (playerInited) return;
+        playerInited = true;
+        loadPlayerData();
+      };
+
+      async function loadPlayerData() {
+        const wrap = document.getElementById('playerContent');
+        wrap.innerHTML = '<p style="color:var(--text-muted)">Carregando...</p>';
+
+        try {
+          const [statsRes, matchesRes, champsRes, cmpRes] = await Promise.all([
+            fetch('/api/player/stats'),
+            fetch('/api/player/matches'),
+            fetch('/api/champions'),
+            fetch('/api/player/stats/comparison'),
+          ]);
+
+          if (!statsRes.ok || !matchesRes.ok) {
+            wrap.innerHTML = '<p style="color:var(--red)">Erro ao carregar dados do jogador.</p>';
+            return;
+          }
+
+          const stats = await statsRes.json();
+          const matches = await matchesRes.json();
+          const champs = champsRes.ok ? await champsRes.json() : [];
+          const cmpData = cmpRes.ok ? await cmpRes.json() : null;
+
+          renderPlayer(wrap, stats, matches, champs, cmpData);
+        } catch (err) {
+          wrap.innerHTML = `<p style="color:var(--red)">Erro: ${err.message}</p>`;
+        }
+      }
+
+      function renderPlayer(wrap, stats, matches, champs, cmpData) {
+        const o = stats.overall || {};
+        const streaks = stats.streaks || {};
+        const bests = stats.personal_bests || {};
+        const trends = stats.trends || {};
+        const champMap = {};
+        champs.forEach(c => { champMap[c.name] = c.avatar_url; });
+
+        let html = '';
+
+        // Overview cards
+        html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.8rem;margin-bottom:1rem;">
+          <div class="stat-card"><div class="stat-label">Partidas</div><div class="stat-value">${o.total_games || 0}</div></div>
+          <div class="stat-card"><div class="stat-label">Winrate</div><div class="stat-value" style="color:${(o.winrate||0)>=50?'var(--green)':'var(--red)'}">${o.winrate || 0}%</div></div>
+          <div class="stat-card"><div class="stat-label">KDA</div><div class="stat-value">${o.kda || 0}</div></div>
+          <div class="stat-card"><div class="stat-label">MVPs</div><div class="stat-value" style="color:var(--gold)">${o.total_mvp || 0}</div></div>
+        </div>`;
+
+        // Streak section
+        if (streaks.current_streak > 0) {
+          const isWin = streaks.current_streak_type === 'win';
+          const streakColor = isWin ? 'var(--green)' : 'var(--red)';
+          const streakLabel = isWin ? 'SEQUÊNCIA DE VITÓRIAS' : 'SEQUÊNCIA DE DERROTAS';
+          html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.8rem;margin-bottom:1.5rem;">
+            <div class="stat-card" style="border-color:${streakColor};">
+              <div class="stat-label">${streakLabel}</div>
+              <div class="stat-value" style="color:${streakColor}">${streaks.current_streak}x</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Maior Sequência Win</div>
+              <div class="stat-value" style="color:var(--green)">${streaks.longest_win || 0}x</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Maior Sequência Loss</div>
+              <div class="stat-value" style="color:var(--red)">${streaks.longest_loss || 0}x</div>
+            </div>
+          </div>`;
+        }
+
+        // Add match form
+        html += `<details id="playerAddForm" style="margin-bottom:1.5rem;">
+          <summary style="cursor:pointer;color:var(--accent);font-weight:600;font-family:var(--font-heading);font-size:0.95rem;letter-spacing:0.03em;">+ ADICIONAR PARTIDA</summary>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin-top:0.6rem;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.8rem;">
+              <div class="form-group"><label>Data</label><input type="date" id="pDate" value="${new Date().toISOString().slice(0,10)}" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;"></div>
+              <div class="form-group"><label>Champion</label><input type="text" id="pChamp" list="pChampList" placeholder="Ex: Yasuo" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;">
+                <datalist id="pChampList">${champs.map(c=>`<option value="${c.name}">`).join('')}</datalist></div>
+              <div class="form-group"><label>Role</label><select id="pRole" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;">
+                <option value="top">Top</option><option value="jungle">Jungle</option><option value="mid">Mid</option><option value="bot">Bot</option><option value="support">Support</option></select></div>
+              <div class="form-group"><label>Resultado</label><select id="pResult" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;">
+                <option value="win">Win</option><option value="loss">Loss</option></select></div>
+              <div class="form-group"><label>Kills</label><input type="number" id="pKills" value="0" min="0" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;"></div>
+              <div class="form-group"><label>Deaths</label><input type="number" id="pDeaths" value="0" min="0" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;"></div>
+              <div class="form-group"><label>Assists</label><input type="number" id="pAssists" value="0" min="0" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;"></div>
+              <div class="form-group"><label>Modo</label><select id="pMode" style="background:var(--bg-main);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem;width:100%;font-family:var(--font-mono);font-size:0.85rem;">
+                <option value="ranked">Ranked</option><option value="normal">Normal</option><option value="custom">Custom</option><option value="scrim">Scrim</option></select></div>
+            </div>
+            <div style="display:flex;gap:0.6rem;align-items:center;margin-top:0.8rem;">
+              <label style="font-size:0.82rem;color:var(--text-secondary);display:flex;align-items:center;gap:0.3rem;"><input type="checkbox" id="pMvp"> MVP</label>
+              <label style="font-size:0.82rem;color:var(--text-secondary);display:flex;align-items:center;gap:0.3rem;"><input type="checkbox" id="pSvp"> SVP</label>
+            </div>
+            <button onclick="submitPlayerMatch()" style="margin-top:0.8rem;padding:0.5rem 1.5rem;background:var(--accent-dim);color:var(--text-primary);border:1px solid var(--accent);border-radius:6px;font-family:var(--font-heading);font-weight:700;cursor:pointer;letter-spacing:0.03em;">SALVAR</button>
+          </div>
+        </details>`;
+
+        // Champion stats table
+        if (stats.champions && stats.champions.length) {
+          html += `<h3 style="font-family:var(--font-heading);color:var(--accent);margin-bottom:0.6rem;font-size:1rem;">Champions</h3>`;
+          html += `<div style="overflow-x:auto;margin-bottom:1.5rem;"><table class="data-table"><thead><tr>
+            <th>CHAMPION</th><th>GAMES</th><th>WIN%</th><th>KDA</th><th>MVPs</th>
+          </tr></thead><tbody>`;
+          for (const c of stats.champions) {
+            const avatar = champMap[c.champion] ? `<img src="${champMap[c.champion]}" width="24" height="24" style="border-radius:4px;vertical-align:middle;margin-right:0.4rem;">` : '';
+            html += `<tr>
+              <td>${avatar}${c.champion}</td>
+              <td>${c.games}</td>
+              <td style="color:${c.winrate>=50?'var(--green)':'var(--red)'}">${c.winrate}%</td>
+              <td>${c.kda}</td>
+              <td style="color:var(--gold)">${c.mvps || 0}</td>
+            </tr>`;
+          }
+          html += `</tbody></table></div>`;
+        }
+
+        // Role stats
+        if (stats.roles && stats.roles.length) {
+          html += `<h3 style="font-family:var(--font-heading);color:var(--accent);margin-bottom:0.6rem;font-size:1rem;">Por Role</h3>`;
+          html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.6rem;margin-bottom:1.5rem;">`;
+          for (const r of stats.roles) {
+            html += `<div class="stat-card">
+              <div class="stat-label" style="text-transform:uppercase">${r.role}</div>
+              <div style="font-size:0.85rem;">${r.games} games &middot; <span style="color:${r.winrate>=50?'var(--green)':'var(--red)'}">${r.winrate}%</span> &middot; KDA ${r.kda}</div>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+
+        // Personal bests
+        if (bests.best_kda || bests.most_kills || bests.most_assists) {
+          html += `<h3 style="font-family:var(--font-heading);color:var(--accent);margin-bottom:0.6rem;font-size:1rem;">Personal Bests</h3>`;
+          html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.6rem;margin-bottom:1.5rem;">`;
+          const bestItems = [
+            { label: 'Melhor KDA', game: bests.best_kda, value: bests.best_kda ? `${bests.best_kda.kda} KDA` : '-' },
+            { label: 'Mais Kills', game: bests.most_kills, value: bests.most_kills ? `${bests.most_kills.kills} kills` : '-' },
+            { label: 'Mais Assists', game: bests.most_assists, value: bests.most_assists ? `${bests.most_assists.assists} assists` : '-' },
+          ];
+          for (const bi of bestItems) {
+            const g = bi.game;
+            const champImg = g && champMap[g.champion] ? `<img src="${champMap[g.champion]}" width="20" height="20" style="border-radius:3px;vertical-align:middle;margin-right:0.3rem;">` : '';
+            const detail = g ? `${champImg}${g.champion} · ${g.kills}/${g.deaths}/${g.assists} · ${g.date}` : '';
+            html += `<div class="stat-card">
+              <div class="stat-label">${bi.label}</div>
+              <div class="stat-value" style="color:var(--gold);font-size:1.3rem;">${bi.value}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem;">${detail}</div>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+
+        // Improvement trends
+        if (trends.last10 && trends.last10.games > 0) {
+          html += `<h3 style="font-family:var(--font-heading);color:var(--accent);margin-bottom:0.6rem;font-size:1rem;">Tendencia de Melhora</h3>`;
+          html += `<div style="overflow-x:auto;margin-bottom:1.5rem;"><table class="data-table"><thead><tr>
+            <th>PERIODO</th><th>PARTIDAS</th><th>WIN%</th><th>KDA</th><th>K</th><th>D</th><th>A</th>
+          </tr></thead><tbody>`;
+          const periods = [
+            { label: 'Ultimas 10', d: trends.last10 },
+            { label: 'Ultimas 20', d: trends.last20 },
+            { label: 'Geral', d: trends.all_time },
+          ];
+          for (const p of periods) {
+            if (!p.d || !p.d.games) continue;
+            const wColor = p.d.winrate >= 50 ? 'var(--green)' : 'var(--red)';
+            html += `<tr>
+              <td style="font-weight:600;">${p.label}</td>
+              <td>${p.d.games}</td>
+              <td style="color:${wColor}">${p.d.winrate}%</td>
+              <td>${p.d.kda}</td>
+              <td>${p.d.avg_kills}</td>
+              <td>${p.d.avg_deaths}</td>
+              <td>${p.d.avg_assists}</td>
+            </tr>`;
+          }
+          html += `</tbody></table></div>`;
+        }
+
+        // Comparison: player vs team
+        if (cmpData && cmpData.comparison && cmpData.comparison.length > 0) {
+          html += `<h3 style="font-family:var(--font-heading);color:var(--accent);margin-bottom:0.6rem;font-size:1rem;">Eu vs Time (por Role)</h3>`;
+          html += `<div style="overflow-x:auto;margin-bottom:1.5rem;"><table class="data-table"><thead><tr>
+            <th>ROLE</th><th>FONTE</th><th>GAMES</th><th>WIN%</th><th>KDA</th><th>K</th><th>D</th><th>A</th>
+          </tr></thead><tbody>`;
+          for (const row of cmpData.comparison) {
+            const hasPlayer = row.player && row.player.games > 0;
+            const hasTeam = row.team && row.team.games > 0;
+            if (hasPlayer) {
+              const p = row.player;
+              html += `<tr style="background:rgba(34,211,238,0.05);">
+                <td rowspan="${hasTeam ? 2 : 1}" style="font-weight:700;text-transform:uppercase;vertical-align:middle;">${row.role}</td>
+                <td style="color:var(--accent);font-size:0.8rem;">Eu</td>
+                <td>${p.games}</td>
+                <td style="color:${p.winrate>=50?'var(--green)':'var(--red)'}">${p.winrate}%</td>
+                <td>${p.kda}</td>
+                <td>${p.avg_kills}</td>
+                <td>${p.avg_deaths}</td>
+                <td>${p.avg_assists}</td>
+              </tr>`;
+            }
+            if (hasTeam) {
+              const t = row.team;
+              if (!hasPlayer) {
+                html += `<tr><td style="font-weight:700;text-transform:uppercase;">${row.role}</td>`;
+              } else {
+                html += `<tr>`;
+              }
+              html += `<td style="color:var(--text-muted);font-size:0.8rem;">Time</td>
+                <td>${t.games}</td>
+                <td style="color:${t.winrate>=50?'var(--green)':'var(--red)'}">-</td>
+                <td>${t.kda}</td>
+                <td>${t.avg_kills}</td>
+                <td>${t.avg_deaths}</td>
+                <td>${t.avg_assists}</td>
+              </tr>`;
+            }
+          }
+          html += `</tbody></table></div>`;
+        }
+
+        // Match history
+        html += `<h3 style="font-family:var(--font-heading);color:var(--accent);margin-bottom:0.6rem;font-size:1rem;">Historico</h3>`;
+        if (matches.length === 0) {
+          html += `<p style="color:var(--text-muted)">Nenhuma partida registrada ainda.</p>`;
+        } else {
+          html += `<div style="display:flex;flex-direction:column;gap:0.5rem;">`;
+          for (const m of matches) {
+            const avatar = champMap[m.champion] ? `<img src="${champMap[m.champion]}" width="28" height="28" style="border-radius:4px;vertical-align:middle;margin-right:0.5rem;">` : '';
+            const winColor = m.result === 'win' ? 'var(--green)' : 'var(--red)';
+            const kda = `${m.kills}/${m.deaths}/${m.assists}`;
+            html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.6rem 0.8rem;display:flex;align-items:center;gap:0.8rem;font-size:0.85rem;">
+              ${avatar}
+              <span style="font-weight:600;min-width:90px;">${m.champion}</span>
+              <span style="color:var(--text-muted);min-width:55px;">${m.role}</span>
+              <span style="color:${winColor};font-weight:700;min-width:35px;">${m.result.toUpperCase()}</span>
+              <span style="font-family:var(--font-mono);min-width:70px;">${kda}</span>
+              <span style="color:var(--text-muted);font-size:0.78rem;">${m.date}</span>
+              ${m.is_mvp ? '<span style="color:var(--gold);font-weight:700;font-size:0.75rem;">MVP</span>' : ''}
+              <button onclick="deletePlayerMatch(${m.id})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:0.8rem;opacity:0.6;" title="Remover">&#10005;</button>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+
+        wrap.innerHTML = html;
+      }
+
+      async function submitPlayerMatch() {
+        const body = {
+          date: document.getElementById('pDate').value,
+          champion: document.getElementById('pChamp').value.trim(),
+          role: document.getElementById('pRole').value,
+          result: document.getElementById('pResult').value,
+          kills: parseInt(document.getElementById('pKills').value) || 0,
+          deaths: parseInt(document.getElementById('pDeaths').value) || 0,
+          assists: parseInt(document.getElementById('pAssists').value) || 0,
+          game_mode: document.getElementById('pMode').value,
+          is_mvp: document.getElementById('pMvp').checked,
+          is_svp: document.getElementById('pSvp').checked,
+        };
+        if (!body.champion) { alert('Escolha um champion'); return; }
+
+        const res = await fetch('/api/player/matches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          playerInited = false;
+          loadPlayerData();
+        } else {
+          const err = await res.json();
+          alert(err.detail || 'Erro ao salvar');
+        }
+      }
+
+      async function deletePlayerMatch(id) {
+        if (!confirm('Remover esta partida?')) return;
+        const res = await fetch(`/api/player/matches/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          playerInited = false;
+          loadPlayerData();
+        }
+      }
+
+      // Check auth on load
+      checkAuth().then(updateNav);
     </script>
   </body>
 </html>
