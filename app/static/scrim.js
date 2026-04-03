@@ -631,7 +631,14 @@
             <span style="display:flex;gap:4px;align-items:center">
               ${(m.players || [])
                 .filter((p) => p.team === "ours")
-                .map((p) => champAvatarHtml(p.champion, 22))
+                .map((p) => {
+                  const badge = p.is_mvp
+                    ? `<span style="position:absolute;bottom:-2px;right:-2px;background:#f59e0b;color:#000;font-size:9px;font-weight:700;border-radius:3px;padding:0 2px;line-height:1.4">MVP</span>`
+                    : p.is_svp
+                    ? `<span style="position:absolute;bottom:-2px;right:-2px;background:#a78bfa;color:#000;font-size:9px;font-weight:700;border-radius:3px;padding:0 2px;line-height:1.4">SVP</span>`
+                    : "";
+                  return `<span style="position:relative;display:inline-block">${champAvatarHtml(p.champion, 22)}${badge}</span>`;
+                })
                 .join("")}
             </span>
           </div>
@@ -915,18 +922,20 @@
     const params = buildFilterParams("sf");
     const body = document.getElementById("statsBody");
     try {
-      const [statsRes, roleAvgRes, allChampsRes, generalRes] = await Promise.all([
+      const [statsRes, roleAvgRes, allChampsRes, generalRes, mvpSvpRes] = await Promise.all([
         fetch("/api/scrims/stats?" + params.toString()),
         fetch("/api/scrims/role-averages?" + params.toString()),
         fetch("/api/scrims/all-champions-by-role?" + params.toString()),
         fetch("/api/scrims/all-champions-general?" + params.toString()),
+        fetch("/api/scrims/mvp-svp?" + params.toString()),
       ]);
       if (!statsRes.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
       const data = await statsRes.json();
       const roleAvg = roleAvgRes.ok ? await roleAvgRes.json() : [];
       const allChamps = allChampsRes.ok ? await allChampsRes.json() : {};
       const generalChamps = generalRes.ok ? await generalRes.json() : [];
-      renderStatsBody(data, body, roleAvg, allChamps, generalChamps);
+      const mvpSvp = mvpSvpRes.ok ? await mvpSvpRes.json() : {};
+      renderStatsBody(data, body, roleAvg, allChamps, generalChamps, mvpSvp);
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
@@ -1016,12 +1025,13 @@
 
   const ROLE_LABELS = { top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot", support: "Support" };
 
-  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps) {
+  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps, mvpSvp) {
     const ov = data.overall || {};
     const roles = data.roles || {};
     roleAvg = roleAvg || [];
     allChamps = allChamps || {};
     generalChamps = generalChamps || [];
+    mvpSvp = mvpSvp || {};
 
     let html = `
       <div class="overall-banner">
@@ -1059,6 +1069,54 @@
         `;
       }
       html += "</div>";
+    }
+
+    // MVP / SVP leaderboard
+    const mvpChamps = (mvpSvp.by_champion || []).filter(c => c.mvp_count > 0 || c.svp_count > 0);
+    if (mvpChamps.length) {
+      html += '<h2 style="margin:1.25rem 0 0.5rem">🏅 Leaderboard MVP / SVP</h2>';
+      html += '<div class="stats-grid">';
+      // Top MVPs
+      const topMvps = [...mvpChamps].sort((a, b) => b.mvp_count - a.mvp_count).slice(0, 5);
+      html += '<div class="stat-card"><h3>Top MVP</h3>';
+      for (const c of topMvps) {
+        if (!c.mvp_count) continue;
+        html += `<div class="stat-row" style="display:flex;align-items:center;gap:6px">
+          ${champAvatarHtml(c.champion, 22)}
+          <span style="flex:1">${escHtml(c.champion)} <small style="text-transform:capitalize">(${c.role})</small></span>
+          <span class="value" style="color:#f59e0b;font-weight:700">${c.mvp_count}×MVP</span>
+        </div>`;
+      }
+      html += '</div>';
+      // Top SVPs
+      const topSvps = [...mvpChamps].sort((a, b) => b.svp_count - a.svp_count).slice(0, 5);
+      html += '<div class="stat-card"><h3>Top SVP</h3>';
+      for (const c of topSvps) {
+        if (!c.svp_count) continue;
+        html += `<div class="stat-row" style="display:flex;align-items:center;gap:6px">
+          ${champAvatarHtml(c.champion, 22)}
+          <span style="flex:1">${escHtml(c.champion)} <small style="text-transform:capitalize">(${c.role})</small></span>
+          <span class="value" style="color:#a78bfa;font-weight:700">${c.svp_count}×SVP</span>
+        </div>`;
+      }
+      html += '</div>';
+      // Awards by role
+      const byRole = mvpSvp.by_role || [];
+      if (byRole.length) {
+        html += '<div class="stat-card"><h3>Awards por Rota</h3>';
+        for (const r of byRole) {
+          html += `<div class="stat-row">
+            <span style="text-transform:capitalize">${r.role}</span>
+            <span class="value">
+              <span style="color:#f59e0b">${r.mvp_count} MVP</span>
+              &nbsp;/&nbsp;
+              <span style="color:#a78bfa">${r.svp_count} SVP</span>
+            </span>
+          </div>`;
+        }
+        html += '</div>';
+      }
+      html += '</div>';
     }
 
     // General tier list (all champions, all roles)

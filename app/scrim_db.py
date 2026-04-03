@@ -763,6 +763,47 @@ def get_duos(
     return result
 
 
+def get_mvp_svp_summary(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> dict[str, Any]:
+    """Count MVP and SVP awards per role and per champion for our team."""
+    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    role_query = f"""
+        SELECT
+            p.role,
+            SUM(p.is_mvp) as mvp_count,
+            SUM(p.is_svp) as svp_count,
+            SUM(p.is_mvp + p.is_svp) as total_awards,
+            COUNT(*) as games
+        FROM match_players p
+        JOIN matches m ON p.match_id = m.id
+        WHERE p.team = 'ours'{extra_where}
+        GROUP BY p.role
+        ORDER BY total_awards DESC
+    """
+    champ_query = f"""
+        SELECT
+            p.champion,
+            p.role,
+            SUM(p.is_mvp) as mvp_count,
+            SUM(p.is_svp) as svp_count,
+            COUNT(*) as games
+        FROM match_players p
+        JOIN matches m ON p.match_id = m.id
+        WHERE p.team = 'ours'{extra_where}
+        GROUP BY p.champion, p.role
+        HAVING (mvp_count + svp_count) > 0
+        ORDER BY (mvp_count + svp_count) DESC, mvp_count DESC
+    """
+    with _connect() as conn:
+        role_rows = [dict(r) for r in conn.execute(role_query, params).fetchall()]
+        champ_rows = [dict(r) for r in conn.execute(champ_query, params).fetchall()]
+    return {"by_role": role_rows, "by_champion": champ_rows}
+
+
 def get_pick_priority(
     opponent: str | None = None,
     date_from: str | None = None,

@@ -20,6 +20,7 @@ from app.scrim_db import (
     get_duos,
     get_match,
     get_matchups,
+    get_mvp_svp_summary,
     get_opponents,
     get_patches,
     get_pick_priority,
@@ -296,6 +297,18 @@ def api_pick_priority(
     patch: str | None = None,
 ) -> list[dict[str, Any]]:
     return get_pick_priority(opponent=opponent, date_from=date_from, date_to=date_to, patch=patch)
+
+
+@router.get("/api/scrims/mvp-svp")
+def api_mvp_svp(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> dict[str, Any]:
+    return get_mvp_svp_summary(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+    )
 
 
 @router.get("/api/scrims/filters")
