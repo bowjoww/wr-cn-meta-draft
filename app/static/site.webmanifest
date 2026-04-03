@@ -1,0 +1,25 @@
+{
+  "name": "ScrimVault",
+  "short_name": "ScrimVault",
+  "description": "Painel tático de scrims e meta competitivo para equipes de Wild Rift.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#071823",
+  "theme_color": "#071823",
+  "icons": [
+    {
+      "src": "/static/branding/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/branding/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
