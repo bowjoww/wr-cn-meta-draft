@@ -393,6 +393,8 @@
         ["d", "D", "Deaths"],
         ["a", "A", "Assists"],
         ["gold", "Gold", "Gold Earned"],
+        ["dmg", "Dmg", "Damage Dealt"],
+        ["dtk", "DTk", "Damage Taken"],
         ["pick", "P#", "Pick Order"],
       ]) {
         const inp = document.createElement("input");
@@ -497,6 +499,10 @@
         };
         const gold = document.getElementById(`${team}_${role}_gold`).value;
         if (gold) p.gold_earned = parseFloat(gold);
+        const dmg = document.getElementById(`${team}_${role}_dmg`).value;
+        if (dmg) p.damage_dealt = parseFloat(dmg);
+        const dtk = document.getElementById(`${team}_${role}_dtk`).value;
+        if (dtk) p.damage_taken = parseFloat(dtk);
         const pick = document.getElementById(`${team}_${role}_pick`).value;
         if (pick) p.pick_order = parseInt(pick);
         players.push(p);
@@ -591,6 +597,8 @@
         document.getElementById(`${team}_${role}_d`).value = "0";
         document.getElementById(`${team}_${role}_a`).value = "0";
         document.getElementById(`${team}_${role}_gold`).value = "";
+        document.getElementById(`${team}_${role}_dmg`).value = "";
+        document.getElementById(`${team}_${role}_dtk`).value = "";
         document.getElementById(`${team}_${role}_pick`).value = "";
         document.getElementById(`${team}_${role}_mvp`).checked = false;
         document.getElementById(`${team}_${role}_svp`).checked = false;
@@ -708,6 +716,8 @@
           document.getElementById(`${team}_${role}_d`).value = "0";
           document.getElementById(`${team}_${role}_a`).value = "0";
           document.getElementById(`${team}_${role}_gold`).value = "";
+          document.getElementById(`${team}_${role}_dmg`).value = "";
+          document.getElementById(`${team}_${role}_dtk`).value = "";
           document.getElementById(`${team}_${role}_pick`).value = "";
           document.getElementById(`${team}_${role}_mvp`).checked = false;
           document.getElementById(`${team}_${role}_svp`).checked = false;
@@ -728,6 +738,8 @@
         document.getElementById(`${team}_${p.role}_d`).value = p.deaths || 0;
         document.getElementById(`${team}_${p.role}_a`).value = p.assists || 0;
         if (p.gold_earned != null) document.getElementById(`${team}_${p.role}_gold`).value = p.gold_earned;
+        if (p.damage_dealt != null) document.getElementById(`${team}_${p.role}_dmg`).value = p.damage_dealt;
+        if (p.damage_taken != null) document.getElementById(`${team}_${p.role}_dtk`).value = p.damage_taken;
         if (p.pick_order != null) document.getElementById(`${team}_${p.role}_pick`).value = p.pick_order;
         document.getElementById(`${team}_${p.role}_mvp`).checked = !!p.is_mvp;
         document.getElementById(`${team}_${p.role}_svp`).checked = !!p.is_svp;
@@ -830,6 +842,12 @@
           document.getElementById(`${team}_${role}_a`).value = p.assists || 0;
           if (p.gold_earned != null) {
             document.getElementById(`${team}_${role}_gold`).value = p.gold_earned;
+          }
+          if (p.damage_dealt != null) {
+            document.getElementById(`${team}_${role}_dmg`).value = p.damage_dealt;
+          }
+          if (p.damage_taken != null) {
+            document.getElementById(`${team}_${role}_dtk`).value = p.damage_taken;
           }
           if (p.is_mvp) {
             document.getElementById(`${team}_${role}_mvp`).checked = true;
@@ -1088,6 +1106,7 @@
             <div class="stat-row"><span>KP% Medio</span><span class="value">${ra.avg_kp != null ? ra.avg_kp + "%" : "—"}</span></div>
             <div class="stat-row"><span>GPM Medio</span><span class="value">${ra.avg_gpm || "—"}</span></div>
             <div class="stat-row"><span>K / D / A</span><span class="value">${ra.avg_kills} / ${ra.avg_deaths} / ${ra.avg_assists}</span></div>
+            <div class="stat-row"><span>Dmg Share%</span><span class="value">${ra.avg_dmg_share != null ? ra.avg_dmg_share + "%" : "—"}</span></div>
           </div>
         `;
       }

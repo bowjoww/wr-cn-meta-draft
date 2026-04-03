@@ -473,9 +473,22 @@ def get_role_averages(
                     + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
                 )
                 END
-            ), 0) as avg_gpm
+            ), 0) as avg_gpm,
+            ROUND(AVG(p.damage_dealt), 0) as avg_damage_dealt,
+            ROUND(AVG(p.damage_taken), 0) as avg_damage_taken,
+            ROUND(AVG(
+                CASE WHEN td.total_dmg > 0 AND p.damage_dealt IS NOT NULL
+                THEN p.damage_dealt * 100.0 / td.total_dmg
+                END
+            ), 1) as avg_dmg_share
         FROM match_players p
         JOIN matches m ON p.match_id = m.id
+        JOIN (
+            SELECT match_id, SUM(damage_dealt) as total_dmg
+            FROM match_players
+            WHERE team = 'ours'
+            GROUP BY match_id
+        ) td ON p.match_id = td.match_id
         WHERE p.team = 'ours'{extra_where}
         GROUP BY p.role
         ORDER BY p.role
