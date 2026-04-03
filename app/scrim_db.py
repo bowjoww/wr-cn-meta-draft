@@ -94,6 +94,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Normalize champion names (e.g. MonkeyKing -> Wukong)
     conn.execute("UPDATE match_players SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
     conn.execute("UPDATE bans SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
+    # Correct patch versions by date range (idempotent):
+    #   7.0f: 18/03 – 24/03  |  7.0g: 25/03 onwards
+    conn.execute(
+        "UPDATE matches SET patch = '7.0f' "
+        "WHERE date >= '2026-03-18' AND date <= '2026-03-24'"
+    )
+    conn.execute(
+        "UPDATE matches SET patch = '7.0g' "
+        "WHERE date >= '2026-03-25'"
+    )
 
 
 def init_db() -> None:
