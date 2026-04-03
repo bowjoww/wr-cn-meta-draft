@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WR Meta — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/scrim.css">
+    <style>
+      /* ===== Dashboard layout ===== */
+      .dash-tabs {
+        display: flex;
+        gap: 0.25rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid var(--border);
+        padding-bottom: 0;
+      }
+
+      .dash-tab {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        padding: 0.55rem 1.1rem;
+        font-family: var(--font-heading);
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        cursor: pointer;
+        letter-spacing: 0.05em;
+        transition: color 0.15s, border-color 0.15s;
+      }
+
+      .dash-tab:hover { color: var(--text-secondary); }
+      .dash-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+      /* ===== Stats banner ===== */
+      .stats-banner {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .stat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.9rem 1.2rem;
+        min-width: 130px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+
+      .stat-card .stat-label {
+        font-size: 0.7rem;
+        font-family: var(--font-mono);
+        color: var(--text-muted);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .stat-card .stat-value {
+        font-size: 1.5rem;
+        font-family: var(--font-heading);
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1.1;
+      }
+
+      .stat-card .stat-value.green { color: var(--green); }
+      .stat-card .stat-value.red { color: var(--red); }
+      .stat-card .stat-value.accent { color: var(--accent); }
+      .stat-card .stat-value.amber { color: var(--amber); }
+
+      .stat-card .stat-sub {
+        font-size: 0.72rem;
+        font-family: var(--font-mono);
+        color: var(--text-muted);
+      }
+
+      /* ===== Team name row ===== */
+      .team-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+      }
+
+      .team-name {
+        font-family: var(--font-heading);
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: 0.04em;
+      }
+
+      .plan-badge {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-family: var(--font-mono);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        padding: 0.18rem 0.5rem;
+        border-radius: 4px;
+        text-transform: uppercase;
+        vertical-align: middle;
+      }
+
+      .plan-badge.owner   { background: rgba(240,180,41,0.18); color: var(--gold); border: 1px solid rgba(240,180,41,0.4); }
+      .plan-badge.coach   { background: rgba(34,211,238,0.12); color: var(--accent); border: 1px solid rgba(34,211,238,0.35); }
+      .plan-badge.player  { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+      .plan-badge.free    { background: rgba(100,116,139,0.15); color: var(--text-muted); border: 1px solid var(--border); }
+
+      /* ===== Player cards grid ===== */
+      .player-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+
+      .player-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1.1rem 1.2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+        transition: border-color 0.15s;
+      }
+
+      .player-card:hover { border-color: var(--border-strong); }
+
+      .player-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+
+      .player-card-name {
+        font-family: var(--font-heading);
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .player-stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.4rem;
+      }
+
+      .pstat {
+        background: var(--bg-main);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.08rem;
+      }
+
+      .pstat-val {
+        font-family: var(--font-heading);
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text-primary);
+      }
+
+      .pstat-val.green { color: var(--green); }
+      .pstat-val.red   { color: var(--red); }
+      .pstat-val.amber { color: var(--amber); }
+      .pstat-val.accent { color: var(--accent); }
+
+      .pstat-lbl {
+        font-family: var(--font-mono);
+        font-size: 0.63rem;
+        color: var(--text-muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .player-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .player-meta-chip {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        color: var(--text-secondary);
+        background: var(--bg-main);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.18rem 0.45rem;
+      }
+
+      .no-games {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 1rem 0;
+      }
+
+      /* ===== Roster table ===== */
+      .roster-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        font-family: var(--font-mono);
+      }
+
+      .roster-table th {
+        text-align: left;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 0.55rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+
+      .roster-table td {
+        padding: 0.65rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-primary);
+        vertical-align: middle;
+      }
+
+      .roster-table tr:last-child td { border-bottom: none; }
+      .roster-table tr:hover td { background: var(--surface-hover); }
+
+      .roster-table select {
+        background: var(--bg-main);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.3rem 0.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        cursor: pointer;
+      }
+
+      .btn-danger {
+        background: var(--red-dim);
+        color: var(--red);
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        border-radius: 4px;
+        padding: 0.3rem 0.65rem;
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .btn-danger:hover { background: rgba(248, 113, 113, 0.22); }
+
+      .btn-save {
+        background: none;
+        color: var(--accent);
+        border: 1px solid var(--accent-dim);
+        border-radius: 4px;
+        padding: 0.3rem 0.65rem;
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+
+      .btn-save:hover { background: var(--accent-glow); }
+
+      /* ===== Invite row ===== */
+      .invite-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 1.2rem;
+        padding: 0.9rem 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        flex-wrap: wrap;
+      }
+
+      .invite-token-box {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--accent);
+        background: var(--bg-main);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.35rem 0.7rem;
+        flex: 1;
+        min-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: all;
+      }
+
+      .btn-secondary {
+        background: none;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-strong);
+        border-radius: 4px;
+        padding: 0.4rem 0.8rem;
+        font-family: var(--font-heading);
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        letter-spacing: 0.04em;
+        transition: color 0.15s, border-color 0.15s;
+      }
+
+      .btn-secondary:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+      /* ===== Export section ===== */
+      .export-section {
+        max-width: 520px;
+      }
+
+      .export-section p {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        line-height: 1.7;
+        margin-bottom: 1rem;
+      }
+
+      .export-section ul {
+        list-style: none;
+        margin-bottom: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .export-section ul li {
+        font-family: var(--font-mono);
+        font-size: 0.79rem;
+        color: var(--text-muted);
+        padding-left: 1rem;
+        position: relative;
+      }
+
+      .export-section ul li::before {
+        content: "›";
+        position: absolute;
+        left: 0;
+        color: var(--accent);
+      }
+
+      .btn-export {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--accent-dim);
+        color: var(--text-primary);
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        padding: 0.65rem 1.2rem;
+        font-family: var(--font-heading);
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        letter-spacing: 0.04em;
+        text-decoration: none;
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+
+      .btn-export:hover {
+        background: var(--accent);
+        color: var(--bg-deep);
+        box-shadow: 0 0 16px var(--accent-glow-strong);
+      }
+
+      /* ===== Skeleton loader ===== */
+      .skeleton {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        height: 80px;
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.45; }
+      }
+
+      /* ===== Toast ===== */
+      .toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: var(--surface-raised);
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        padding: 0.7rem 1rem;
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        color: var(--text-primary);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        transform: translateY(120%);
+        transition: transform 0.25s ease;
+        z-index: 100;
+        max-width: 320px;
+      }
+
+      .toast.show { transform: translateY(0); }
+      .toast.success { border-color: rgba(74,222,128,0.4); color: var(--green); }
+      .toast.error   { border-color: rgba(248,113,113,0.4); color: var(--red); }
+
+      /* ===== Misc ===== */
+      .section-title {
+        font-family: var(--font-heading);
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 0.8rem;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .invite-label {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-icon">&#9876;</span>
+          <span class="brand-text">WR<span class="brand-accent">META</span></span>
+        </div>
+        <nav class="top-nav">
+          <a href="/" style="color:var(--text-muted);text-decoration:none;font-family:var(--font-heading);font-size:0.85rem;font-weight:600;padding:0.3rem 0.6rem;border-radius:4px;transition:color 0.15s;" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-muted)'">← App</a>
+          <span style="font-family:var(--font-heading);font-size:0.85rem;font-weight:700;color:var(--accent);padding:0.3rem 0.6rem;">Dashboard</span>
+        </nav>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:0.6rem;font-size:0.82rem;font-family:var(--font-mono);">
+          <span id="userInfo" style="color:var(--text-secondary);"></span>
+          <span id="userPlan" class="plan-badge"></span>
+          <button onclick="doLogout()" style="background:none;border:1px solid var(--border);color:var(--text-muted);padding:0.3rem 0.6rem;border-radius:4px;cursor:pointer;font-family:var(--font-mono);font-size:0.78rem;">Sair</button>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <!-- Loading guard -->
+        <div id="loadingGuard" style="padding:3rem 0;text-align:center;font-family:var(--font-mono);font-size:0.85rem;color:var(--text-muted);">Carregando...</div>
+
+        <!-- Dashboard content (hidden until auth check passes) -->
+        <div id="dashContent" style="display:none;">
+          <div class="team-header">
+            <span class="team-name" id="teamNameDisplay">—</span>
+            <span class="plan-badge owner">OWNER</span>
+            <span id="memberCountBadge" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-muted);"></span>
+          </div>
+
+          <!-- Tab bar -->
+          <div class="dash-tabs">
+            <button class="dash-tab active" onclick="switchTab('overview')" id="tabOverview">OVERVIEW</button>
+            <button class="dash-tab" onclick="switchTab('players')" id="tabPlayers">JOGADORES</button>
+            <button class="dash-tab" onclick="switchTab('roster')" id="tabRoster">ROSTER</button>
+            <button class="dash-tab" onclick="switchTab('export')" id="tabExport">EXPORTAR</button>
+          </div>
+
+          <!-- ============ OVERVIEW TAB ============ -->
+          <div id="sectionOverview">
+            <div class="section-title">Scrims do time</div>
+            <div class="stats-banner" id="scrimsBanner">
+              <div class="skeleton" style="height:80px;flex:1;min-width:110px;"></div>
+              <div class="skeleton" style="height:80px;flex:1;min-width:110px;"></div>
+              <div class="skeleton" style="height:80px;flex:1;min-width:110px;"></div>
+              <div class="skeleton" style="height:80px;flex:1;min-width:110px;"></div>
+              <div class="skeleton" style="height:80px;flex:1;min-width:110px;"></div>
+            </div>
+          </div>
+
+          <!-- ============ PLAYERS TAB ============ -->
+          <div id="sectionPlayers" style="display:none;">
+            <div class="section-title">Performance por jogador</div>
+            <div class="player-grid" id="playerGrid">
+              <div class="skeleton" style="height:170px;"></div>
+              <div class="skeleton" style="height:170px;"></div>
+              <div class="skeleton" style="height:170px;"></div>
+            </div>
+          </div>
+
+          <!-- ============ ROSTER TAB ============ -->
+          <div id="sectionRoster" style="display:none;">
+            <div class="section-title">Membros do time</div>
+            <div style="overflow-x:auto;">
+              <table class="roster-table" id="rosterTable">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Plano</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="rosterBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Invite link generator -->
+            <div class="invite-row" id="inviteRow">
+              <span class="invite-label">Convidar jogador:</span>
+              <div class="invite-token-box" id="inviteTokenBox" title="Clique para copiar">—</div>
+              <button class="btn-secondary" onclick="generateInvite()">Gerar Link</button>
+              <button class="btn-secondary" onclick="copyInviteLink()" id="copyInviteBtn" style="display:none;">Copiar</button>
+            </div>
+          </div>
+
+          <!-- ============ EXPORT TAB ============ -->
+          <div id="sectionExport" style="display:none;">
+            <div class="export-section">
+              <div class="section-title">Relatório do time</div>
+              <p>Gera um arquivo CSV com os dados do time para apresentações, patrocinadores ou revisões internas.</p>
+              <ul>
+                <li>Total de scrims e winrate do time</li>
+                <li>Winrate por lado (Blue / Red)</li>
+                <li>Performance individual de cada jogador</li>
+                <li>KDA médio, MVPs, SVPs, role principal</li>
+                <li>Winrate recente (últimas 10 partidas)</li>
+              </ul>
+              <a href="/api/dashboard/export" class="btn-export" download>
+                ⬇ Baixar CSV
+              </a>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+      let currentUser = null;
+      let summaryData = null;
+      let playersLoaded = false;
+      let rosterLoaded = false;
+
+      // ===== Init =====
+      async function init() {
+        try {
+          const res = await fetch('/api/auth/me');
+          if (!res.ok) { window.location.href = '/login'; return; }
+          const data = await res.json();
+          currentUser = data.user;
+
+          if (currentUser.plan !== 'owner') {
+            window.location.href = '/';
+            return;
+          }
+
+          document.getElementById('userInfo').textContent = currentUser.display_name;
+          const planEl = document.getElementById('userPlan');
+          planEl.textContent = currentUser.plan.toUpperCase();
+          planEl.className = `plan-badge ${currentUser.plan}`;
+
+          document.getElementById('loadingGuard').style.display = 'none';
+          document.getElementById('dashContent').style.display = '';
+
+          loadSummary();
+        } catch (e) {
+          window.location.href = '/login';
+        }
+      }
+
+      async function doLogout() {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login';
+      }
+
+      // ===== Tab switching =====
+      function switchTab(tab) {
+        ['overview', 'players', 'roster', 'export'].forEach(t => {
+          document.getElementById(`section${capitalize(t)}`).style.display = t === tab ? '' : 'none';
+          document.getElementById(`tab${capitalize(t)}`).classList.toggle('active', t === tab);
+        });
+
+        if (tab === 'players' && !playersLoaded) loadPlayers();
+        if (tab === 'roster'  && !rosterLoaded)  loadRoster();
+      }
+
+      function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+      // ===== Overview =====
+      async function loadSummary() {
+        try {
+          const res = await fetch('/api/dashboard/summary');
+          if (!res.ok) throw new Error(await res.text());
+          summaryData = await res.json();
+
+          const t = summaryData.team;
+          document.getElementById('teamNameDisplay').textContent = t.name;
+          document.getElementById('memberCountBadge').textContent = `${summaryData.member_count} membro${summaryData.member_count !== 1 ? 's' : ''}`;
+
+          const s = summaryData.scrims;
+          const wrClass = s.winrate >= 50 ? 'green' : 'red';
+          const recentClass = s.recent10_winrate == null ? '' : s.recent10_winrate >= 50 ? 'green' : 'red';
+
+          const banner = document.getElementById('scrimsBanner');
+          banner.innerHTML = `
+            ${statCard('SCRIMS', s.total, '', 'accent')}
+            ${statCard('WINRATE', s.winrate != null ? s.winrate + '%' : '—', `${s.wins || 0}V / ${(s.total||0) - (s.wins||0)}D`, wrClass)}
+            ${statCard('ÚLTIMAS 10', s.recent10_winrate != null ? s.recent10_winrate + '%' : '—', 'WR recente', recentClass)}
+            ${statCard('BLUE SIDE', s.blue_side_winrate != null ? s.blue_side_winrate + '%' : '—', `${s.blue_side_games} jogos`, 'blue-txt')}
+            ${statCard('RED SIDE',  s.red_side_winrate  != null ? s.red_side_winrate  + '%' : '—', `${s.red_side_games} jogos`,  'red-txt')}
+          `;
+          // Fix dynamic color classes for blue/red
+          banner.querySelectorAll('.stat-value.blue-txt').forEach(el => {
+            el.style.color = 'var(--blue-team)';
+            el.classList.remove('blue-txt');
+          });
+          banner.querySelectorAll('.stat-value.red-txt').forEach(el => {
+            el.style.color = 'var(--red-team)';
+            el.classList.remove('red-txt');
+          });
+        } catch (e) {
+          document.getElementById('scrimsBanner').innerHTML = `<div class="empty-state">Erro ao carregar dados</div>`;
+        }
+      }
+
+      function statCard(label, value, sub, colorClass) {
+        return `
+          <div class="stat-card">
+            <span class="stat-label">${label}</span>
+            <span class="stat-value ${colorClass}">${value}</span>
+            ${sub ? `<span class="stat-sub">${sub}</span>` : ''}
+          </div>`;
+      }
+
+      // ===== Players =====
+      async function loadPlayers() {
+        try {
+          const res = await fetch('/api/dashboard/players');
+          if (!res.ok) throw new Error(await res.text());
+          const players = await res.json();
+          playersLoaded = true;
+
+          const grid = document.getElementById('playerGrid');
+          if (players.length === 0) {
+            grid.innerHTML = '<div class="empty-state">Nenhum jogador registrou partidas ainda.</div>';
+            return;
+          }
+
+          grid.innerHTML = players.map(p => renderPlayerCard(p)).join('');
+        } catch (e) {
+          document.getElementById('playerGrid').innerHTML = `<div class="empty-state">Erro ao carregar jogadores</div>`;
+        }
+      }
+
+      function renderPlayerCard(p) {
+        const s = p.stats;
+        const hasGames = s.total_games > 0;
+        const wrClass = !hasGames ? '' : s.winrate >= 50 ? 'green' : 'red';
+        const kdaClass = !hasGames ? '' : s.kda >= 3 ? 'green' : s.kda >= 2 ? 'accent' : '';
+        const recentClass = s.recent10_winrate == null ? '' : s.recent10_winrate >= 50 ? 'green' : 'red';
+
+        const statsBlock = hasGames ? `
+          <div class="player-stats-row">
+            ${pstat(s.winrate + '%', 'WR', wrClass)}
+            ${pstat(s.kda,           'KDA', kdaClass)}
+            ${pstat(s.recent10_winrate != null ? s.recent10_winrate + '%' : '—', 'Ult 10', recentClass)}
+            ${pstat(s.avg_kills + '/' + s.avg_deaths + '/' + s.avg_assists, 'K/D/A', '')}
+            ${pstat(s.total_mvp, 'MVPs', s.total_mvp > 0 ? 'amber' : '')}
+            ${pstat(s.total_svp, 'SVPs', '')}
+          </div>
+          <div class="player-meta">
+            ${s.top_role    ? `<span class="player-meta-chip">${s.top_role}</span>` : ''}
+            ${s.top_champion ? `<span class="player-meta-chip">${s.top_champion}</span>` : ''}
+            <span class="player-meta-chip">${s.total_games}g</span>
+          </div>` : `<div class="no-games">Sem partidas registradas</div>`;
+
+        return `
+          <div class="player-card">
+            <div class="player-card-header">
+              <span class="player-card-name">${escHtml(p.display_name)}</span>
+              <span class="plan-badge ${p.plan}">${p.plan.toUpperCase()}</span>
+            </div>
+            ${statsBlock}
+          </div>`;
+      }
+
+      function pstat(val, lbl, cls) {
+        return `<div class="pstat"><span class="pstat-val ${cls}">${val}</span><span class="pstat-lbl">${lbl}</span></div>`;
+      }
+
+      // ===== Roster =====
+      async function loadRoster() {
+        try {
+          const res = await fetch('/api/dashboard/roster');
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          rosterLoaded = true;
+          renderRoster(data.members);
+        } catch (e) {
+          document.getElementById('rosterBody').innerHTML = `<tr><td colspan="4" style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.82rem;padding:1rem;">Erro ao carregar roster</td></tr>`;
+        }
+      }
+
+      function renderRoster(members) {
+        const tbody = document.getElementById('rosterBody');
+        if (members.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Nenhum membro no time.</td></tr>`;
+          return;
+        }
+
+        const planOptions = ['free', 'player', 'coach', 'owner'].map(p =>
+          `<option value="${p}">${p}</option>`
+        ).join('');
+
+        tbody.innerHTML = members.map(m => {
+          const isSelf = m.id === currentUser.id;
+          return `
+            <tr>
+              <td style="font-weight:600;">${escHtml(m.display_name)}</td>
+              <td style="color:var(--text-muted);">${escHtml(m.email)}</td>
+              <td>
+                <select id="planSel_${m.id}" onchange="onPlanChange(${m.id})"${isSelf ? ' disabled' : ''}>
+                  ${['free','player','coach','owner'].map(p =>
+                    `<option value="${p}"${p === m.plan ? ' selected' : ''}>${p}</option>`
+                  ).join('')}
+                </select>
+              </td>
+              <td style="display:flex;gap:0.4rem;align-items:center;">
+                ${!isSelf ? `
+                  <button class="btn-save" id="saveBtn_${m.id}" style="display:none;" onclick="savePlan(${m.id})">Salvar</button>
+                  <button class="btn-danger" onclick="removeMember(${m.id}, '${escAttr(m.display_name)}')">Remover</button>
+                ` : '<span style="font-size:0.72rem;color:var(--text-muted);">(você)</span>'}
+              </td>
+            </tr>`;
+        }).join('');
+      }
+
+      function onPlanChange(userId) {
+        const btn = document.getElementById(`saveBtn_${userId}`);
+        if (btn) btn.style.display = '';
+      }
+
+      async function savePlan(userId) {
+        const sel = document.getElementById(`planSel_${userId}`);
+        const plan = sel.value;
+        try {
+          const res = await fetch(`/api/dashboard/roster/${userId}/plan`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plan }),
+          });
+          if (!res.ok) throw new Error((await res.json()).detail);
+          showToast('Plano atualizado', 'success');
+          document.getElementById(`saveBtn_${userId}`).style.display = 'none';
+        } catch (e) {
+          showToast(e.message || 'Erro ao salvar plano', 'error');
+        }
+      }
+
+      async function removeMember(userId, name) {
+        if (!confirm(`Remover ${name} do time? Ele voltará para o plano free.`)) return;
+        try {
+          const res = await fetch(`/api/dashboard/roster/${userId}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error((await res.json()).detail);
+          showToast(`${name} removido do time`, 'success');
+          rosterLoaded = false;
+          loadRoster();
+        } catch (e) {
+          showToast(e.message || 'Erro ao remover membro', 'error');
+        }
+      }
+
+      async function generateInvite() {
+        try {
+          const res = await fetch('/api/auth/team/invite', { method: 'POST' });
+          if (!res.ok) throw new Error((await res.json()).detail);
+          const data = await res.json();
+          const link = `${window.location.origin}/invite/${data.invite_token}`;
+          document.getElementById('inviteTokenBox').textContent = link;
+          document.getElementById('inviteTokenBox').title = 'Clique para copiar';
+          document.getElementById('copyInviteBtn').style.display = '';
+          showToast('Link gerado! Válido por 72h', 'success');
+        } catch (e) {
+          showToast(e.message || 'Erro ao gerar convite', 'error');
+        }
+      }
+
+      function copyInviteLink() {
+        const text = document.getElementById('inviteTokenBox').textContent;
+        navigator.clipboard.writeText(text).then(() => showToast('Link copiado!', 'success'));
+      }
+
+      // ===== Toast =====
+      let _toastTimer = null;
+      function showToast(msg, type = '') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = `toast show${type ? ' ' + type : ''}`;
+        clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(() => { el.className = 'toast'; }, 3000);
+      }
+
+      // ===== Helpers =====
+      function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+      function escAttr(s) {
+        return String(s).replace(/'/g, "\\'");
+      }
+
+      init();
+    </script>
+  </body>
+</html>

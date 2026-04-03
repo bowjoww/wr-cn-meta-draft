@@ -211,6 +211,7 @@
           <button id="navOpenSeries" onclick="switchSection('openseries')">Open Series</button>
           <button id="navScrim" style="display:none" onclick="switchSection('scrim')">Scrim Tracker</button>
           <button id="navPlayer" style="display:none" onclick="switchSection('player')">Player Tracker</button>
+          <a id="navDashboard" href="/dashboard" style="display:none;color:var(--gold);text-decoration:none;font-family:var(--font-heading);font-size:0.85rem;font-weight:700;padding:0.3rem 0.6rem;border-radius:4px;border:1px solid rgba(240,180,41,0.35);letter-spacing:0.04em;" onmouseover="this.style.background='rgba(240,180,41,0.08)'" onmouseout="this.style.background='none'">Dashboard</a>
         </nav>
         <div id="userArea" style="margin-left:auto;display:flex;align-items:center;gap:0.6rem;font-size:0.82rem;font-family:var(--font-mono);">
           <span id="userInfo" style="color:var(--text-secondary);display:none;"></span>
@@ -601,6 +602,7 @@
         currentUser = user;
         const navScrim = document.getElementById('navScrim');
         const navPlayer = document.getElementById('navPlayer');
+        const navDashboard = document.getElementById('navDashboard');
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
         const userInfo = document.getElementById('userInfo');
@@ -624,6 +626,9 @@
           if (user.plan === 'player') {
             navPlayer.style.display = '';
           }
+          if (user.plan === 'owner') {
+            navDashboard.style.display = '';
+          }
         } else {
           loginBtn.style.display = '';
           logoutBtn.style.display = 'none';
@@ -631,6 +636,7 @@
           userPlan.style.display = 'none';
           navScrim.style.display = 'none';
           navPlayer.style.display = 'none';
+          navDashboard.style.display = 'none';
         }
       }
 

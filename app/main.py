@@ -35,6 +35,7 @@ from app.fetch_openseries import (
 )
 from app.auth_db import init_auth_db
 from app.auth_routes import router as auth_router
+from app.dashboard_routes import router as dashboard_router
 from app.player_routes import router as player_router, init_player_db
 from app.scrim_db import init_db
 from app.scrim_routes import router as scrim_router
@@ -43,6 +44,7 @@ app = FastAPI(title="WR CN Meta Viewer")
 app.include_router(scrim_router)
 app.include_router(auth_router)
 app.include_router(player_router)
+app.include_router(dashboard_router)
 logger = logging.getLogger(__name__)
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_cn_meta.json"
@@ -185,6 +187,11 @@ def index() -> FileResponse:
 @app.get("/login")
 def login_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/dashboard")
+def dashboard_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "dashboard.html")
 
 
 @app.get("/health")
