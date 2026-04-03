@@ -1030,11 +1030,21 @@
   function renderStatsBody(data, container, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps) {
     const ov = data.overall || {};
     const roles = data.roles || {};
+    const sideStats = data.side_stats || {};
     roleAvg = roleAvg || [];
     allChamps = allChamps || {};
     generalChamps = generalChamps || [];
     mvpSvp = mvpSvp || {};
     enemyChamps = enemyChamps || {};
+
+    const blue = sideStats.blue || null;
+    const red = sideStats.red || null;
+    const blueWrHtml = blue
+      ? `<div class="number" style="color:#3b82f6">${blue.winrate}%</div><div class="label">Blue WR <small>(${blue.games}g)</small></div>`
+      : `<div class="number" style="color:#3b82f6">—</div><div class="label">Blue WR</div>`;
+    const redWrHtml = red
+      ? `<div class="number" style="color:#ef4444">${red.winrate}%</div><div class="label">Red WR <small>(${red.games}g)</small></div>`
+      : `<div class="number" style="color:#ef4444">—</div><div class="label">Red WR</div>`;
 
     let html = `
       <div class="overall-banner">
@@ -1050,6 +1060,8 @@
           <div class="number">${ov.winrate || 0}%</div>
           <div class="label">Winrate</div>
         </div>
+        <div class="overall-stat">${blueWrHtml}</div>
+        <div class="overall-stat">${redWrHtml}</div>
       </div>
     `;
 

@@ -393,7 +393,27 @@ def get_stat_summary(
         else 0
     )
 
-    return {"roles": result, "overall": overall}
+    # Side stats (blue/red winrate)
+    side_query = f"""
+        SELECT
+            m.side,
+            COUNT(*) as games,
+            SUM(CASE WHEN m.result = 'win' THEN 1 ELSE 0 END) as wins
+        FROM matches m
+        WHERE m.side IS NOT NULL{extra_where}
+        GROUP BY m.side
+    """
+    with _connect() as conn:
+        side_rows = conn.execute(side_query, params).fetchall()
+
+    side_stats: dict[str, dict] = {}
+    for row in side_rows:
+        r = dict(row)
+        side = r["side"]
+        r["winrate"] = round(r["wins"] / r["games"] * 100, 1) if r["games"] > 0 else 0
+        side_stats[side] = r
+
+    return {"roles": result, "overall": overall, "side_stats": side_stats}
 
 
 def get_role_averages(
