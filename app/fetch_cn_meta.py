@@ -42,6 +42,17 @@ TIER_TO_CN_TIER = {
 
 DISPLAY_NAME_OVERRIDES: dict[str, str] = {
     "MonkeyKing": "Wukong",
+    "AurelionSol": "Aurelion Sol",
+    "JarvanIV": "Jarvan IV",
+    "Kaisa": "Kai'Sa",
+    "Khazix": "Kha'Zix",
+    "LeeSin": "Lee Sin",
+    "MissFortune": "Miss Fortune",
+    "Nunu": "Nunu & Willump",
+    "TwistedFate": "Twisted Fate",
+    "XinZhao": "Xin Zhao",
+    "DrMundo": "Dr. Mundo",
+    "MasterYi": "Master Yi",
 }
 
 

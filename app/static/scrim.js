@@ -40,7 +40,7 @@
   }
 
   // Display name aliases (internal API name -> display name)
-  const CHAMP_ALIASES = {"monkeyking": "wukong"};
+  const CHAMP_ALIASES = {"monkeyking": "wukong", "nunu": "nunu & willump"};
 
   async function loadChampions() {
     try {
@@ -56,6 +56,13 @@
         for (const [alias, canonical] of Object.entries(CHAMP_ALIASES)) {
           if (champByName[canonical] && !champByName[alias]) {
             champByName[alias] = champByName[canonical];
+          }
+        }
+        // Register no-space variants for legacy DB names (e.g. "LeeSin" -> "Lee Sin")
+        for (const c of champions) {
+          const compact = c.name.replace(/[\s''.&]/g, "").toLowerCase();
+          if (compact !== c.name.toLowerCase() && !champByName[compact]) {
+            champByName[compact] = c;
           }
         }
       }
