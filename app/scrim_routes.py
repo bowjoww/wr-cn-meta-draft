@@ -7,9 +7,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from pydantic import BaseModel, field_validator
 
+from app.auth_middleware import require_plan
 from app.scrim_db import (
     delete_match,
     find_teams_by_players,
@@ -192,9 +193,9 @@ def _hero_map_to_list(hero_map: dict[str, dict[str, str]]) -> list[dict[str, str
 # ---------------------------------------------------------------------------
 
 @router.post("/api/scrims/matches")
-def create_match(body: MatchInput) -> dict[str, Any]:
+def create_match(body: MatchInput, user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, Any]:
     data = _normalize_match_data(body.model_dump())
-    match_id = insert_match(data)
+    match_id = insert_match(data, team_id=user.get("team_id"))
     return {"id": match_id, "message": "Match created"}
 
 
@@ -206,6 +207,7 @@ def api_list_matches(
     patch: str | None = None,
     side: str | None = None,
     result: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
     return list_matches(
         opponent=opponent,
@@ -214,28 +216,29 @@ def api_list_matches(
         patch=patch,
         side=side,
         result=result,
+        team_id=user.get("team_id"),
     )
 
 
 @router.get("/api/scrims/matches/{match_id}")
-def api_get_match(match_id: int) -> dict[str, Any]:
-    match = get_match(match_id)
+def api_get_match(match_id: int, user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, Any]:
+    match = get_match(match_id, team_id=user.get("team_id"))
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     return match
 
 
 @router.put("/api/scrims/matches/{match_id}")
-def api_update_match(match_id: int, body: MatchInput) -> dict[str, str]:
+def api_update_match(match_id: int, body: MatchInput, user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, str]:
     data = _normalize_match_data(body.model_dump())
-    if not update_match(match_id, data):
+    if not update_match(match_id, data, team_id=user.get("team_id")):
         raise HTTPException(status_code=404, detail="Match not found")
     return {"message": "Match updated"}
 
 
 @router.delete("/api/scrims/matches/{match_id}")
-def api_delete_match(match_id: int) -> dict[str, str]:
-    if not delete_match(match_id):
+def api_delete_match(match_id: int, user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, str]:
+    if not delete_match(match_id, team_id=user.get("team_id")):
         raise HTTPException(status_code=404, detail="Match not found")
     return {"message": "Match deleted"}
 
@@ -250,9 +253,11 @@ def api_scrim_stats(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> dict[str, Any]:
     return get_stat_summary(
-        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
     )
 
 
@@ -262,9 +267,11 @@ def api_champion_stats(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
     return get_champion_stats(
-        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
     )
 
 
@@ -274,8 +281,12 @@ def api_matchups(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
-    return get_matchups(opponent=opponent, date_from=date_from, date_to=date_to, patch=patch)
+    return get_matchups(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
+    )
 
 
 @router.get("/api/scrims/duos")
@@ -284,8 +295,12 @@ def api_duos(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
-    return get_duos(opponent=opponent, date_from=date_from, date_to=date_to, patch=patch)
+    return get_duos(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
+    )
 
 
 @router.get("/api/scrims/pick-priority")
@@ -294,16 +309,20 @@ def api_pick_priority(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
-    return get_pick_priority(opponent=opponent, date_from=date_from, date_to=date_to, patch=patch)
+    return get_pick_priority(
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
+    )
 
 
 @router.get("/api/scrims/filters")
-def api_scrim_filters() -> dict[str, list[str]]:
+def api_scrim_filters(user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, list[str]]:
     """Return available filter values (opponents, patches)."""
     return {
-        "opponents": get_opponents(),
-        "patches": get_patches(),
+        "opponents": get_opponents(team_id=user.get("team_id")),
+        "patches": get_patches(team_id=user.get("team_id")),
     }
 
 
@@ -313,9 +332,11 @@ def api_role_averages(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
     return get_role_averages(
-        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
     )
 
 
@@ -325,9 +346,11 @@ def api_all_champions_by_role(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> dict[str, list[dict[str, Any]]]:
     return get_all_champions_by_role(
-        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
     )
 
 
@@ -337,9 +360,11 @@ def api_all_champions_general(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> list[dict[str, Any]]:
     return get_all_champions_general(
-        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch
+        opponent=opponent, date_from=date_from, date_to=date_to, patch=patch,
+        team_id=user.get("team_id"),
     )
 
 
@@ -354,12 +379,12 @@ class RosterInput(BaseModel):
 
 
 @router.get("/api/scrims/rosters")
-def api_get_rosters() -> dict[str, list[str]]:
+def api_get_rosters(user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, list[str]]:
     return get_all_rosters()
 
 
 @router.post("/api/scrims/rosters")
-def api_upsert_roster(body: RosterInput) -> dict[str, str]:
+def api_upsert_roster(body: RosterInput, user: dict = Depends(require_plan("coach", "owner"))) -> dict[str, str]:
     upsert_team_roster(body.team_name, body.players)
     return {"message": f"Roster for {body.team_name} updated ({len(body.players)} players)"}
 
@@ -372,6 +397,7 @@ def api_upsert_roster(body: RosterInput) -> dict[str, str]:
 async def api_ocr(
     files: list[UploadFile] = File(...),
     our_side: str | None = Form(None),
+    user: dict = Depends(require_plan("coach", "owner")),
 ) -> dict[str, Any]:
     if our_side and our_side not in VALID_SIDES:
         raise HTTPException(status_code=400, detail="our_side must be 'blue' or 'red'")

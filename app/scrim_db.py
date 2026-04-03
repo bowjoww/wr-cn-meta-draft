@@ -16,6 +16,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "scrims.db"
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS matches (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id     INTEGER,
     patch       TEXT NOT NULL,
     date        TEXT NOT NULL,
     opponent    TEXT NOT NULL,
@@ -83,21 +84,51 @@ def _checkpoint() -> None:
 atexit.register(_checkpoint)
 
 
+def _ensure_migrations_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS migrations (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT NOT NULL UNIQUE,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )"""
+    )
+
+
+def _applied(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute("SELECT 1 FROM migrations WHERE name = ?", (name,)).fetchone()
+    return row is not None
+
+
+def _record(conn: sqlite3.Connection, name: str) -> None:
+    conn.execute("INSERT OR IGNORE INTO migrations (name) VALUES (?)", (name,))
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Add columns that may be missing in older databases."""
-    cursor = conn.execute("PRAGMA table_info(match_players)")
-    existing = {row["name"] for row in cursor.fetchall()}
-    if "is_mvp" not in existing:
-        conn.execute("ALTER TABLE match_players ADD COLUMN is_mvp INTEGER NOT NULL DEFAULT 0")
-    if "is_svp" not in existing:
-        conn.execute("ALTER TABLE match_players ADD COLUMN is_svp INTEGER NOT NULL DEFAULT 0")
-    # Normalize champion names (e.g. MonkeyKing -> Wukong)
-    conn.execute("UPDATE match_players SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
-    conn.execute("UPDATE bans SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
+    """Run idempotent, versioned migrations against an existing database."""
+    _ensure_migrations_table(conn)
+
+    if not _applied(conn, "001_add_is_mvp_svp"):
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(match_players)").fetchall()}
+        if "is_mvp" not in cols:
+            conn.execute("ALTER TABLE match_players ADD COLUMN is_mvp INTEGER NOT NULL DEFAULT 0")
+        if "is_svp" not in cols:
+            conn.execute("ALTER TABLE match_players ADD COLUMN is_svp INTEGER NOT NULL DEFAULT 0")
+        _record(conn, "001_add_is_mvp_svp")
+
+    if not _applied(conn, "002_add_team_id_to_matches"):
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(matches)").fetchall()}
+        if "team_id" not in cols:
+            conn.execute("ALTER TABLE matches ADD COLUMN team_id INTEGER")
+        _record(conn, "002_add_team_id_to_matches")
+
+    if not _applied(conn, "003_normalize_monkeyking"):
+        conn.execute("UPDATE match_players SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
+        conn.execute("UPDATE bans SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
+        _record(conn, "003_normalize_monkeyking")
 
 
 def init_db() -> None:
-    """Create tables if they don't exist, then run migrations."""
+    """Create tables if they don't exist, then run versioned migrations."""
     with _connect() as conn:
         conn.executescript(_SCHEMA)
         _migrate(conn)
@@ -107,13 +138,14 @@ def init_db() -> None:
 # CRUD – matches
 # ---------------------------------------------------------------------------
 
-def insert_match(data: dict[str, Any]) -> int:
+def insert_match(data: dict[str, Any], team_id: int | None = None) -> int:
     """Insert a match with players and bans. Returns the new match id."""
     with _connect() as conn:
         cur = conn.execute(
-            """INSERT INTO matches (patch, date, opponent, side, result, duration, notes)
-               VALUES (:patch, :date, :opponent, :side, :result, :duration, :notes)""",
+            """INSERT INTO matches (team_id, patch, date, opponent, side, result, duration, notes)
+               VALUES (:team_id, :patch, :date, :opponent, :side, :result, :duration, :notes)""",
             {
+                "team_id": team_id,
                 "patch": data["patch"],
                 "date": data["date"],
                 "opponent": data["opponent"],
@@ -166,10 +198,13 @@ def _insert_bans(conn: sqlite3.Connection, match_id: int, bans: list[dict]) -> N
         )
 
 
-def get_match(match_id: int) -> dict[str, Any] | None:
+def get_match(match_id: int, team_id: int | None = None) -> dict[str, Any] | None:
     """Return a single match with its players and bans."""
     with _connect() as conn:
-        row = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+        if team_id is not None:
+            row = conn.execute("SELECT * FROM matches WHERE id = ? AND team_id = ?", (match_id, team_id)).fetchone()
+        else:
+            row = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
         if not row:
             return None
 
@@ -191,20 +226,26 @@ def get_match(match_id: int) -> dict[str, Any] | None:
         return match
 
 
-def delete_match(match_id: int) -> bool:
+def delete_match(match_id: int, team_id: int | None = None) -> bool:
     """Delete a match and cascade to players/bans. Returns True if deleted."""
     with _connect() as conn:
-        cur = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+        if team_id is not None:
+            cur = conn.execute("DELETE FROM matches WHERE id = ? AND team_id = ?", (match_id, team_id))
+        else:
+            cur = conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
         deleted = cur.rowcount > 0
     if deleted:
         _checkpoint()
     return deleted
 
 
-def update_match(match_id: int, data: dict[str, Any]) -> bool:
+def update_match(match_id: int, data: dict[str, Any], team_id: int | None = None) -> bool:
     """Replace a match's data. Returns True if the match existed."""
     with _connect() as conn:
-        existing = conn.execute("SELECT id FROM matches WHERE id = ?", (match_id,)).fetchone()
+        if team_id is not None:
+            existing = conn.execute("SELECT id FROM matches WHERE id = ? AND team_id = ?", (match_id, team_id)).fetchone()
+        else:
+            existing = conn.execute("SELECT id FROM matches WHERE id = ?", (match_id,)).fetchone()
         if not existing:
             return False
 
@@ -240,11 +281,15 @@ def list_matches(
     patch: str | None = None,
     side: str | None = None,
     result: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """List matches with optional filters. Returns matches with nested players/bans."""
     clauses: list[str] = []
     params: list[Any] = []
 
+    if team_id is not None:
+        clauses.append("team_id = ?")
+        params.append(team_id)
     if opponent:
         clauses.append("opponent = ?")
         params.append(opponent)
@@ -299,9 +344,13 @@ def _build_where(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> tuple[str, list[Any]]:
     clauses: list[str] = []
     params: list[Any] = []
+    if team_id is not None:
+        clauses.append("m.team_id = ?")
+        params.append(team_id)
     if opponent:
         clauses.append("m.opponent = ?")
         params.append(opponent)
@@ -323,9 +372,10 @@ def get_stat_summary(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> dict[str, Any]:
     """Aggregated stats per role for our team: top champion, games, winrate, KDA, KP%."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
 
     query = f"""
         SELECT
@@ -391,9 +441,10 @@ def get_role_averages(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Aggregate stats per role (across all champions) for our team."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
     query = f"""
         SELECT
             p.role,
@@ -434,9 +485,10 @@ def get_all_champions_by_role(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Stats per champion per role for ALL teams (ours + theirs)."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
     query = f"""
         SELECT
             p.role,
@@ -484,9 +536,10 @@ def get_all_champions_general(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Stats per champion across ALL roles and ALL teams (general tier list)."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
     query = f"""
         SELECT
             p.champion,
@@ -532,9 +585,10 @@ def get_champion_stats(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Per-champion aggregated stats across all roles."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
 
     query = f"""
         SELECT
@@ -656,21 +710,33 @@ def get_champion_stats(
     return result
 
 
-def get_opponents() -> list[str]:
+def get_opponents(team_id: int | None = None) -> list[str]:
     """Return list of distinct opponent names."""
     with _connect() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT opponent FROM matches ORDER BY opponent"
-        ).fetchall()
+        if team_id is not None:
+            rows = conn.execute(
+                "SELECT DISTINCT opponent FROM matches WHERE team_id = ? ORDER BY opponent",
+                (team_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT DISTINCT opponent FROM matches ORDER BY opponent"
+            ).fetchall()
         return [r["opponent"] for r in rows]
 
 
-def get_patches() -> list[str]:
+def get_patches(team_id: int | None = None) -> list[str]:
     """Return list of distinct patches."""
     with _connect() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT patch FROM matches ORDER BY patch DESC"
-        ).fetchall()
+        if team_id is not None:
+            rows = conn.execute(
+                "SELECT DISTINCT patch FROM matches WHERE team_id = ? ORDER BY patch DESC",
+                (team_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT DISTINCT patch FROM matches ORDER BY patch DESC"
+            ).fetchall()
         return [r["patch"] for r in rows]
 
 
@@ -683,9 +749,10 @@ def get_matchups(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return matchup records: our champion vs their champion per role."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
     query = f"""
         SELECT
             ours.role,
@@ -720,9 +787,10 @@ def get_duos(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return duo records: pairs of our champions with W/L."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
     query = f"""
         SELECT
             p1.role AS role1,
@@ -758,9 +826,10 @@ def get_pick_priority(
     date_from: str | None = None,
     date_to: str | None = None,
     patch: str | None = None,
+    team_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return stats by pick order and side."""
-    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    extra_where, params = _build_where(opponent, date_from, date_to, patch, team_id)
     query = f"""
         SELECT
             p.pick_order,

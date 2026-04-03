@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WR Meta — Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/scrim.css">
+    <style>
+      .login-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .login-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 2.5rem;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      }
+
+      .login-card h1 {
+        font-family: var(--font-heading);
+        font-size: 1.6rem;
+        color: var(--accent);
+        text-align: center;
+        margin-bottom: 0.3rem;
+        letter-spacing: 0.04em;
+      }
+
+      .login-card .subtitle {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        font-family: var(--font-mono);
+        margin-bottom: 2rem;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid var(--border);
+      }
+
+      .tabs button {
+        flex: 1;
+        background: none;
+        border: none;
+        padding: 0.7rem 0;
+        font-family: var(--font-heading);
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        transition: color 0.2s, border-color 0.2s;
+      }
+
+      .tabs button:hover {
+        color: var(--text-secondary);
+      }
+
+      .tabs button.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+
+      .form-group {
+        margin-bottom: 1rem;
+      }
+
+      .form-group label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 0.35rem;
+        letter-spacing: 0.03em;
+      }
+
+      .form-group input {
+        width: 100%;
+        background: var(--bg-main);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.65rem 0.8rem;
+        font-family: var(--font-mono);
+        font-size: 0.88rem;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      .form-group input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+
+      .form-group input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .btn-primary {
+        width: 100%;
+        padding: 0.75rem;
+        background: var(--accent-dim);
+        color: var(--text-primary);
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        font-family: var(--font-heading);
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        letter-spacing: 0.04em;
+        transition: background 0.2s, box-shadow 0.2s;
+        margin-top: 0.5rem;
+      }
+
+      .btn-primary:hover {
+        background: var(--accent);
+        color: var(--bg-deep);
+        box-shadow: 0 0 16px var(--accent-glow-strong);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .error-msg {
+        background: var(--red-dim);
+        color: var(--red);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        border-radius: 6px;
+        padding: 0.6rem 0.8rem;
+        font-size: 0.82rem;
+        font-family: var(--font-mono);
+        margin-bottom: 1rem;
+        display: none;
+      }
+
+      .success-msg {
+        background: var(--green-dim);
+        color: var(--green);
+        border: 1px solid rgba(74, 222, 128, 0.3);
+        border-radius: 6px;
+        padding: 0.6rem 0.8rem;
+        font-size: 0.82rem;
+        font-family: var(--font-mono);
+        margin-bottom: 1rem;
+        display: none;
+      }
+
+      .back-link {
+        display: block;
+        text-align: center;
+        margin-top: 1.2rem;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        font-family: var(--font-mono);
+        text-decoration: none;
+      }
+
+      .back-link:hover {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-wrapper">
+      <div class="login-card">
+        <h1>WR META</h1>
+        <div class="subtitle">Command Center</div>
+
+        <div class="tabs">
+          <button id="tabLogin" class="active" onclick="switchTab('login')">LOGIN</button>
+          <button id="tabRegister" onclick="switchTab('register')">CRIAR CONTA</button>
+        </div>
+
+        <div id="errorBox" class="error-msg"></div>
+        <div id="successBox" class="success-msg"></div>
+
+        <!-- Login Form -->
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="loginEmail">Email</label>
+            <input type="email" id="loginEmail" placeholder="seu@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Senha</label>
+            <input type="password" id="loginPassword" placeholder="••••••" required>
+          </div>
+          <button type="submit" class="btn-primary" id="loginBtn">ENTRAR</button>
+        </form>
+
+        <!-- Register Form -->
+        <form id="registerForm" style="display:none" onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label for="regName">Nome</label>
+            <input type="text" id="regName" placeholder="Seu nome ou nick" required>
+          </div>
+          <div class="form-group">
+            <label for="regEmail">Email</label>
+            <input type="email" id="regEmail" placeholder="seu@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="regPassword">Senha</label>
+            <input type="password" id="regPassword" placeholder="Min. 6 caracteres" minlength="6" required>
+          </div>
+          <div class="form-group">
+            <label for="regPassword2">Confirmar Senha</label>
+            <input type="password" id="regPassword2" placeholder="Repita a senha" minlength="6" required>
+          </div>
+          <button type="submit" class="btn-primary" id="registerBtn">CRIAR CONTA</button>
+        </form>
+
+        <a href="/" class="back-link">Voltar ao Meta Viewer</a>
+      </div>
+    </div>
+
+    <script>
+      function switchTab(tab) {
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const tabLogin = document.getElementById('tabLogin');
+        const tabRegister = document.getElementById('tabRegister');
+        hideMessages();
+
+        if (tab === 'login') {
+          loginForm.style.display = '';
+          registerForm.style.display = 'none';
+          tabLogin.classList.add('active');
+          tabRegister.classList.remove('active');
+        } else {
+          loginForm.style.display = 'none';
+          registerForm.style.display = '';
+          tabLogin.classList.remove('active');
+          tabRegister.classList.add('active');
+        }
+      }
+
+      function showError(msg) {
+        const el = document.getElementById('errorBox');
+        el.textContent = msg;
+        el.style.display = 'block';
+        document.getElementById('successBox').style.display = 'none';
+      }
+
+      function showSuccess(msg) {
+        const el = document.getElementById('successBox');
+        el.textContent = msg;
+        el.style.display = 'block';
+        document.getElementById('errorBox').style.display = 'none';
+      }
+
+      function hideMessages() {
+        document.getElementById('errorBox').style.display = 'none';
+        document.getElementById('successBox').style.display = 'none';
+      }
+
+      async function handleLogin(e) {
+        e.preventDefault();
+        hideMessages();
+        const btn = document.getElementById('loginBtn');
+        btn.disabled = true;
+        btn.textContent = 'ENTRANDO...';
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: document.getElementById('loginEmail').value.trim(),
+              password: document.getElementById('loginPassword').value,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            showError(data.detail || 'Erro ao fazer login');
+            return;
+          }
+          showSuccess('Login realizado! Redirecionando...');
+          setTimeout(() => { window.location.href = '/'; }, 600);
+        } catch (err) {
+          showError('Erro de conexao. Tente novamente.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'ENTRAR';
+        }
+      }
+
+      async function handleRegister(e) {
+        e.preventDefault();
+        hideMessages();
+
+        const password = document.getElementById('regPassword').value;
+        const password2 = document.getElementById('regPassword2').value;
+
+        if (password !== password2) {
+          showError('As senhas nao coincidem');
+          return;
+        }
+
+        const btn = document.getElementById('registerBtn');
+        btn.disabled = true;
+        btn.textContent = 'CRIANDO...';
+
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: document.getElementById('regEmail').value.trim(),
+              password: password,
+              display_name: document.getElementById('regName').value.trim(),
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            showError(data.detail || 'Erro ao criar conta');
+            return;
+          }
+          showSuccess('Conta criada! Redirecionando...');
+          setTimeout(() => { window.location.href = '/'; }, 600);
+        } catch (err) {
+          showError('Erro de conexao. Tente novamente.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'CRIAR CONTA';
+        }
+      }
+    </script>
+  </body>
+</html>
