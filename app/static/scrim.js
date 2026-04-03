@@ -1062,6 +1062,14 @@
         </div>
         <div class="overall-stat">${blueWrHtml}</div>
         <div class="overall-stat">${redWrHtml}</div>
+        <div class="overall-stat">
+          <div class="number" style="color:#22c55e">${formatDurationS(ov.avg_win_duration_s)}</div>
+          <div class="label">Dur. Vitoria</div>
+        </div>
+        <div class="overall-stat">
+          <div class="number" style="color:#ef4444">${formatDurationS(ov.avg_loss_duration_s)}</div>
+          <div class="label">Dur. Derrota</div>
+        </div>
       </div>
     `;
 
@@ -1498,6 +1506,13 @@
     const d = document.createElement("div");
     d.textContent = str;
     return d.innerHTML;
+  }
+
+  function formatDurationS(s) {
+    if (s == null) return "—";
+    const m = Math.floor(s / 60);
+    const sec = Math.round(s % 60);
+    return `${m}m ${sec.toString().padStart(2, "0")}s`;
   }
 
   // ---- Expose init ----

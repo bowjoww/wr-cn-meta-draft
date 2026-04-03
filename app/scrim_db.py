@@ -413,6 +413,26 @@ def get_stat_summary(
         r["winrate"] = round(r["wins"] / r["games"] * 100, 1) if r["games"] > 0 else 0
         side_stats[side] = r
 
+    # Duration averages by result
+    duration_query = f"""
+        SELECT
+            AVG(CASE WHEN m.result = 'win' AND m.duration IS NOT NULL AND m.duration LIKE '%:%'
+                THEN CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS INTEGER) * 60
+                   + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS INTEGER)
+                END) as avg_win_duration_s,
+            AVG(CASE WHEN m.result = 'loss' AND m.duration IS NOT NULL AND m.duration LIKE '%:%'
+                THEN CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS INTEGER) * 60
+                   + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS INTEGER)
+                END) as avg_loss_duration_s
+        FROM matches m
+        WHERE 1=1{extra_where}
+    """
+    with _connect() as conn:
+        dur = dict(conn.execute(duration_query, params).fetchone())
+
+    overall["avg_win_duration_s"] = round(dur["avg_win_duration_s"]) if dur["avg_win_duration_s"] is not None else None
+    overall["avg_loss_duration_s"] = round(dur["avg_loss_duration_s"]) if dur["avg_loss_duration_s"] is not None else None
+
     return {"roles": result, "overall": overall, "side_stats": side_stats}
 
 
