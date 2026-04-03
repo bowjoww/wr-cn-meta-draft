@@ -960,7 +960,7 @@
     const params = buildFilterParams("sf");
     const body = document.getElementById("statsBody");
     try {
-      const [statsRes, roleAvgRes, allChampsRes, generalRes, mvpSvpRes, enemyChampsRes, enemyGeneralRes] = await Promise.all([
+      const [statsRes, roleAvgRes, allChampsRes, generalRes, mvpSvpRes, enemyChampsRes, enemyGeneralRes, openSeriesRes] = await Promise.all([
         fetch("/api/scrims/stats?" + params.toString()),
         fetch("/api/scrims/role-averages?" + params.toString()),
         fetch("/api/scrims/all-champions-by-role?" + params.toString()),
@@ -968,6 +968,7 @@
         fetch("/api/scrims/mvp-svp?" + params.toString()),
         fetch("/api/scrims/enemy-champions-by-role?" + params.toString()),
         fetch("/api/scrims/enemy-champions-general?" + params.toString()),
+        fetch("/api/openseries/champions"),
       ]);
       if (!statsRes.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
       const data = await statsRes.json();
@@ -977,7 +978,8 @@
       const mvpSvp = mvpSvpRes.ok ? await mvpSvpRes.json() : {};
       const enemyChamps = enemyChampsRes.ok ? await enemyChampsRes.json() : {};
       const enemyGeneralChamps = enemyGeneralRes.ok ? await enemyGeneralRes.json() : [];
-      renderStatsBody(data, body, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps, enemyGeneralChamps);
+      const openSeriesChamps = openSeriesRes.ok ? await openSeriesRes.json() : [];
+      renderStatsBody(data, body, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps, enemyGeneralChamps, openSeriesChamps);
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro: ' + escHtml(e.message) + "</p>";
     }
@@ -1065,9 +1067,49 @@
     return html;
   }
 
+  function computeOpenSeriesTierScore(c, maxPicks) {
+    const wr = c.win_rate || 0;
+    const kda = Math.min((c.kda || 0) / 8, 1);
+    const presence = Math.min((c.pick_rate + c.ban_rate) / 1.0, 1);
+    const sample = maxPicks > 0 ? Math.min(c.picks / maxPicks, 1) : 0;
+    const raw = wr * 0.40 + kda * 0.20 + presence * 0.25 + sample * 0.15;
+    const penalty = Math.min(c.picks / 3, 1);
+    return raw * penalty;
+  }
+
+  function renderOpenSeriesTierList(champList, title) {
+    title = title || "Open Series — Tier List Brasil";
+    if (!champList || !champList.length) return "";
+    const maxPicks = Math.max(...champList.map((c) => c.picks));
+    const scored = champList.map((c) => ({
+      ...c,
+      tierScore: computeOpenSeriesTierScore(c, maxPicks),
+    }));
+    scored.sort((a, b) => b.tierScore - a.tierScore);
+
+    const tiers = { S: [], A: [], B: [], C: [], D: [] };
+    for (const c of scored) {
+      tiers[getTierLabel(c.tierScore)].push(c);
+    }
+
+    let html = `<div class="tier-lists"><h2 style="margin-bottom:0.75rem">${escHtml(title)}</h2>
+      <p style="font-size:0.8rem;color:#888;margin:-0.5rem 0 0.75rem">Fonte: openseries.com.br — ${champList.length} campeões</p>`;
+    for (const [label, champs] of Object.entries(tiers)) {
+      if (!champs.length) continue;
+      html += `<div class="tier-row tier-${label.toLowerCase()}">
+        <span class="tier-label">${label}</span>
+        <div class="tier-champs">
+          ${champs.map((c) => `<span class="tier-champ" title="${escHtml(c.champion)} — ${c.picks} picks | ${(c.pick_rate*100).toFixed(1)}% PR | ${(c.ban_rate*100).toFixed(1)}% BR | ${(c.win_rate*100).toFixed(1)}% WR | ${c.kda} KDA (score: ${(c.tierScore * 100).toFixed(0)})">${champAvatarHtml(c.champion, 30)}</span>`).join("")}
+        </div>
+      </div>`;
+    }
+    html += "</div>";
+    return html;
+  }
+
   const ROLE_LABELS = { top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot", support: "Support" };
 
-  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps, enemyGeneralChamps) {
+  function renderStatsBody(data, container, roleAvg, allChamps, generalChamps, mvpSvp, enemyChamps, enemyGeneralChamps, openSeriesChamps) {
     const ov = data.overall || {};
     const roles = data.roles || {};
     const sideStats = data.side_stats || {};
@@ -1183,9 +1225,14 @@
       html += '</div>';
     }
 
+    // Open Series tier list (Brazil meta)
+    if (openSeriesChamps && openSeriesChamps.length) {
+      html += renderOpenSeriesTierList(openSeriesChamps, "Open Series — Tier List Brasil");
+    }
+
     // General tier list (all champions, all roles)
     if (generalChamps.length) {
-      html += renderGeneralTierList(generalChamps, "Tier List Geral");
+      html += renderGeneralTierList(generalChamps, "Tier List Geral (Nossas Scrims)");
     }
 
     // Tier list by role (our team)

@@ -383,6 +383,18 @@ def api_all_champions_general(
 
 
 # ---------------------------------------------------------------------------
+# Open Series endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/openseries/champions")
+def api_openseries_champions(force_refresh: bool = False) -> list[dict[str, Any]]:
+    """Return Open Series champion stats (cached, refreshed every 6h or on demand)."""
+    from app.fetch_openseries import get_openseries_data
+    return get_openseries_data(force_refresh=force_refresh)
+
+
+# ---------------------------------------------------------------------------
 # Roster endpoints
 # ---------------------------------------------------------------------------
 
