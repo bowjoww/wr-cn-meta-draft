@@ -7,6 +7,8 @@
   let champByName = {};
   let currentSubTab = "input";
   let editingMatchId = null; // When set, saveMatch uses PUT instead of POST
+  let showAllMatches = false;
+  const MATCH_HISTORY_LIMIT = 15;
 
   // ---- Open Series Teams ----
   // Open Series BR - Fase de Grupos
@@ -611,23 +613,8 @@
     }
   }
 
-  async function loadMatchHistory() {
-    const body = document.getElementById("matchListBody");
-    if (!body) return;
-
-    try {
-      const res = await fetch("/api/scrims/matches");
-      if (!res.ok) return;
-      const matches = await res.json();
-
-      if (!matches.length) {
-        body.innerHTML = '<p style="color:#999;font-size:0.85rem">Nenhuma partida registrada ainda.</p>';
-        return;
-      }
-
-      body.innerHTML = matches
-        .map(
-          (m) => `
+  function renderMatchCard(m) {
+    return `
         <div class="match-card ${m.result}">
           <div class="match-info">
             <span class="result-badge ${m.result}">${m.result === "win" ? "W" : "L"}</span>
@@ -654,13 +641,46 @@
             <button class="btn btn-secondary" onclick="window._scrimEditMatch(${m.id})">Editar</button>
             <button class="btn btn-danger" onclick="window._scrimDeleteMatch(${m.id})">Excluir</button>
           </div>
-        </div>`
-        )
-        .join("");
+        </div>`;
+  }
+
+  async function loadMatchHistory() {
+    const body = document.getElementById("matchListBody");
+    if (!body) return;
+
+    try {
+      const res = await fetch("/api/scrims/matches");
+      if (!res.ok) return;
+      const matches = await res.json();
+
+      if (!matches.length) {
+        body.innerHTML = '<p style="color:#999;font-size:0.85rem">Nenhuma partida registrada ainda.</p>';
+        return;
+      }
+
+      const visible = showAllMatches ? matches : matches.slice(0, MATCH_HISTORY_LIMIT);
+      const hasMore = matches.length > MATCH_HISTORY_LIMIT;
+
+      const cards = visible.map(renderMatchCard).join("");
+
+      const toggleBtn = hasMore
+        ? `<div style="text-align:center;margin-top:8px">
+            <button class="btn btn-secondary" onclick="window._scrimToggleShowAll()">
+              ${showAllMatches ? `Mostrar menos` : `Mostrar todas (${matches.length})`}
+            </button>
+           </div>`
+        : "";
+
+      body.innerHTML = cards + toggleBtn;
     } catch (e) {
       body.innerHTML = '<p style="color:#c00">Erro ao carregar partidas</p>';
     }
   }
+
+  window._scrimToggleShowAll = function () {
+    showAllMatches = !showAllMatches;
+    loadMatchHistory();
+  };
 
   window._scrimDeleteMatch = async function (id) {
     if (!confirm("Excluir esta partida?")) return;
