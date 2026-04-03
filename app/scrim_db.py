@@ -14,6 +14,11 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "scrims.db"
 # ---------------------------------------------------------------------------
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS migrations (
+    name        TEXT PRIMARY KEY,
+    applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS matches (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     patch       TEXT NOT NULL,
@@ -94,16 +99,24 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Normalize champion names (e.g. MonkeyKing -> Wukong)
     conn.execute("UPDATE match_players SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
     conn.execute("UPDATE bans SET champion = 'Wukong' WHERE champion = 'MonkeyKing'")
-    # Correct patch versions by date range (idempotent):
-    #   7.0f: 18/03 – 24/03  |  7.0g: 25/03 onwards
-    conn.execute(
-        "UPDATE matches SET patch = '7.0f' "
-        "WHERE date >= '2026-03-18' AND date <= '2026-03-24'"
-    )
-    conn.execute(
-        "UPDATE matches SET patch = '7.0g' "
-        "WHERE date >= '2026-03-25'"
-    )
+    # Correct patch versions by date range — guarded so it only runs once.
+    # Without the guard the open-ended WHERE date >= '2026-03-25' would overwrite
+    # future patches (e.g. 7.1) every time init_db() is called.
+    already_ran = conn.execute(
+        "SELECT 1 FROM migrations WHERE name = 'patch_correction_7.0fg'"
+    ).fetchone()
+    if not already_ran:
+        conn.execute(
+            "UPDATE matches SET patch = '7.0f' "
+            "WHERE date >= '2026-03-18' AND date <= '2026-03-24'"
+        )
+        conn.execute(
+            "UPDATE matches SET patch = '7.0g' "
+            "WHERE date >= '2026-03-25'"
+        )
+        conn.execute(
+            "INSERT INTO migrations (name) VALUES ('patch_correction_7.0fg')"
+        )
 
 
 def init_db() -> None:
