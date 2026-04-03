@@ -6,9 +6,10 @@ from math import sqrt
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.fetch_cn_meta import (
     CACHE_TTL_SECONDS,
@@ -28,7 +29,7 @@ from app.scoring import EPSILON, power_score, priority_score, zscore
 from app.scrim_db import init_db
 from app.scrim_routes import router as scrim_router
 
-app = FastAPI(title="WR CN Meta Viewer")
+app = FastAPI(title="ScrimVault")
 app.include_router(scrim_router)
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,17 @@ DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_cn_meta.js
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_INDEX_PATH = STATIC_DIR / "index.html"
 
+class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    """Prevent browser from caching static assets so code changes appear immediately."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
+app.add_middleware(NoCacheStaticMiddleware)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

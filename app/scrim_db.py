@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import atexit
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "scrims.db"
+_default_db = Path(__file__).resolve().parent.parent / "data" / "scrims.db"
+DB_PATH = Path(os.environ.get("DB_PATH", str(_default_db)))
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -598,6 +600,50 @@ def get_enemy_champions_by_role(
         )
         role = r.pop("role")
         result.setdefault(role, []).append(r)
+    return result
+
+
+def get_enemy_champions_general(
+    opponent: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    patch: str | None = None,
+) -> list[dict[str, Any]]:
+    """Stats per champion across all roles for enemy team only (general enemy tier list)."""
+    extra_where, params = _build_where(opponent, date_from, date_to, patch)
+    query = f"""
+        SELECT
+            p.champion,
+            COUNT(*) as games,
+            SUM(CASE WHEN m.result = 'loss' THEN 1 ELSE 0 END) as wins,
+            ROUND(AVG(p.kills), 1) as avg_kills,
+            ROUND(AVG(p.deaths), 1) as avg_deaths,
+            ROUND(AVG(p.assists), 1) as avg_assists,
+            ROUND(AVG(p.kp_percent), 1) as avg_kp,
+            ROUND(AVG(
+                CASE WHEN m.duration IS NOT NULL AND p.gold_earned IS NOT NULL
+                THEN p.gold_earned / (
+                    CAST(SUBSTR(m.duration, 1, INSTR(m.duration, ':') - 1) AS REAL)
+                    + CAST(SUBSTR(m.duration, INSTR(m.duration, ':') + 1) AS REAL) / 60.0
+                )
+                END
+            ), 0) as avg_gpm
+        FROM match_players p
+        JOIN matches m ON p.match_id = m.id
+        WHERE p.team = 'theirs'{extra_where}
+        GROUP BY p.champion
+        ORDER BY games DESC
+    """
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["winrate"] = round(r["wins"] / r["games"] * 100, 1) if r["games"] > 0 else 0
+        r["kda"] = round(
+            (r["avg_kills"] + r["avg_assists"]) / max(r["avg_deaths"], 1), 2
+        )
+        result.append(r)
     return result
 
 

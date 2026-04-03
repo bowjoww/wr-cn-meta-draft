@@ -1,6 +1,6 @@
-# WR CN Meta Viewer
+# ScrimVault
 
-MVP em FastAPI para visualizar meta de campeões por rota e tier, com métricas de **winrate**, **pickrate**, **banrate** e múltiplas visões de score (**Draft Priority** e **Power (PBI-like)**).
+Plataforma de scrims e meta competitivo para equipes de Wild Rift. Inclui meta viewer (CN) com métricas de **winrate**, **pickrate**, **banrate** e scores (**Draft Priority** e **Power (PBI-like)**), além de tracker de scrims por partida.
 
 ## Requisitos
 
