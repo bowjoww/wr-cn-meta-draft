@@ -26,11 +26,14 @@ from app.fetch_cn_meta import (
     update_cache,
 )
 from app.scoring import EPSILON, power_score, priority_score, zscore
+from app.broadcaster_db import init_broadcaster_db
+from app.broadcaster_routes import router as broadcaster_router
 from app.scrim_db import init_db
 from app.scrim_routes import router as scrim_router
 
 app = FastAPI(title="ScrimVault")
 app.include_router(scrim_router)
+app.include_router(broadcaster_router)
 logger = logging.getLogger(__name__)
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_cn_meta.json"
@@ -42,8 +45,9 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        if request.url.path.startswith("/static/"):
-            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        if request.url.path.startswith("/static/") or request.url.path == "/favicon.ico":
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
         return response
 
 
@@ -54,6 +58,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    init_broadcaster_db()
 
 Role = Literal["top", "jungle", "mid", "adc", "support"]
 Tier = Literal["diamond_plus", "master", "monarch", "rift_peak"]
@@ -172,6 +177,15 @@ def _cached_cn_last_fetch() -> str | None:
     if not cache_payload:
         return None
     return cache_payload.get("fetched_at")
+
+
+@app.get("/favicon.ico")
+def favicon() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "branding" / "favicon.ico",
+        media_type="image/x-icon",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/")
