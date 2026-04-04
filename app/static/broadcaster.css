@@ -1,0 +1,1009 @@
+/* ============================================================
+   BROADCASTER MODULE — ScrimVault Caster Command Center
+   Reuses CSS variables from scrim.css
+   ============================================================ */
+
+/* ===== PIN Gate Modal ===== */
+.bc-pin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 14, 20, 0.92);
+  backdrop-filter: blur(6px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bc-pin-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+  width: 340px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px var(--accent-glow);
+}
+
+.bc-pin-modal h2 {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.4rem;
+}
+
+.bc-pin-modal p {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.bc-pin-input {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.2em;
+  padding: 0.7rem 1rem;
+  text-align: center;
+  margin-bottom: 1rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.bc-pin-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.bc-pin-error {
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  margin-bottom: 0.75rem;
+  min-height: 1.2em;
+}
+
+.bc-pin-submit {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  background: var(--accent);
+  color: var(--bg-deep);
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 0.2s, box-shadow 0.2s;
+}
+
+.bc-pin-submit:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 16px var(--accent-glow-strong);
+}
+
+.bc-pin-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Broadcaster Section Layout ===== */
+#broadcaster-section {
+  display: none;
+}
+
+#broadcaster-section .section-header {
+  margin-bottom: 1.25rem;
+}
+
+/* Sub-tabs — reuse .scrim-tabs / .scrim-tab from scrim.css */
+.bc-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+  width: fit-content;
+  flex-wrap: wrap;
+}
+
+.bc-tab {
+  border: none;
+  background: transparent;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.bc-tab.active {
+  background: var(--accent);
+  color: var(--bg-deep);
+}
+
+.bc-tab:hover:not(.active) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* ===== Generic card ===== */
+.bc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.bc-card-title {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+/* ===== Match Setup ===== */
+.bc-team-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 700px) {
+  .bc-team-row { grid-template-columns: 1fr; }
+}
+
+.bc-team-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bc-team-selector label {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.bc-select {
+  flex: 1;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.6rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.bc-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.bc-btn {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bc-btn:hover {
+  background: var(--accent);
+  color: var(--bg-deep);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.bc-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bc-btn-danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.bc-btn-danger:hover {
+  background: var(--red);
+  color: var(--bg-deep);
+  box-shadow: 0 0 12px var(--red-dim);
+}
+
+/* Comparison cards */
+.bc-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 700px) {
+  .bc-compare-grid { grid-template-columns: 1fr; }
+}
+
+.bc-compare-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.bc-compare-card .team-name {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.bc-compare-card.blue-side .team-name {
+  color: var(--blue-team);
+}
+
+.bc-compare-card.red-side .team-name {
+  color: var(--red-team);
+}
+
+.bc-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.bc-stat-row:last-child {
+  border-bottom: none;
+}
+
+.bc-stat-label {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+/* Player roster */
+.bc-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.bc-roster-table th {
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.bc-roster-table td {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.bc-roster-table tr:last-child td {
+  border-bottom: none;
+}
+
+.bc-roster-table tr:hover td {
+  background: var(--surface-hover);
+  cursor: pointer;
+}
+
+/* WR banner */
+.bc-wr-banner {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.bc-wr-pill {
+  padding: 0.35rem 1rem;
+  border-radius: 20px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+
+.bc-wr-pill.blue {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--blue-team);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.bc-wr-pill.red {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red-team);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* ===== Draft Tracker ===== */
+.bc-draft-area {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .bc-draft-area { grid-template-columns: 1fr; }
+}
+
+.bc-draft-team {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.bc-draft-team.blue {
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.bc-draft-team.red {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.bc-draft-team-label {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.bc-draft-team.blue .bc-draft-team-label { color: var(--blue-team); }
+.bc-draft-team.red .bc-draft-team-label { color: var(--red-team); }
+
+.bc-slot-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.bc-slots-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.bc-slot {
+  flex: 1;
+  min-height: 52px;
+  background: var(--bg-deep);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  padding: 0.3rem;
+  text-align: center;
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.bc-slot:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.bc-slot.filled {
+  border-style: solid;
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.bc-slot.filled.ban-slot {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.bc-slot.active-pick {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.bc-slot img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.bc-slot .slot-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bc-slot .slot-order {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* Ban slot overlay */
+.bc-slot.ban-slot .slot-order {
+  color: var(--red);
+}
+
+/* Champion picker for draft */
+.bc-champ-picker-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bc-champ-search {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.bc-champ-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.bc-champ-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.bc-champ-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 0.4rem 0.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.bc-champ-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.bc-champ-item.selected {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.bc-champ-item img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.bc-champ-item .champ-name {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Champion stats card */
+.bc-champ-stats {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  min-height: 80px;
+}
+
+.bc-champ-stats .champ-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.bc-champ-stats .champ-header img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+}
+
+.bc-champ-stats .champ-header .champ-nm {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.bc-stat-pills {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bc-stat-pill {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.bc-stat-pill span {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ===== Live Stats ===== */
+.bc-spotlight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.bc-player-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bc-player-card:hover, .bc-player-card.active {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.bc-player-card .player-ign {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.bc-player-card .player-role {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+}
+
+.bc-player-card .player-stat {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.bc-player-card .player-stat strong {
+  color: var(--accent);
+}
+
+/* Highlights */
+.bc-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.bc-highlight-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+
+.bc-highlight-item .hi-label {
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.bc-highlight-item .hi-value {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+}
+
+.bc-highlight-item .hi-sub {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* Talking points */
+.bc-talking-points {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+
+.bc-talking-points ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.bc-talking-points li {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bc-talking-points li::before {
+  content: "▸";
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.bc-talking-points li:last-child {
+  border-bottom: none;
+}
+
+/* ===== Post-Match ===== */
+.bc-postmatch-form {
+  max-width: 640px;
+}
+
+.bc-field-group {
+  margin-bottom: 1rem;
+}
+
+.bc-field-group label {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.bc-radio-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bc-radio-btn {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bc-radio-btn.selected-blue {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--blue-team);
+  color: var(--blue-team);
+}
+
+.bc-radio-btn.selected-red {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: var(--red-team);
+  color: var(--red-team);
+}
+
+.bc-radio-btn.selected-win {
+  background: rgba(74, 222, 128, 0.1);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.bc-textarea {
+  width: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 0.6rem 0.75rem;
+  resize: vertical;
+  min-height: 80px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.bc-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.bc-kda-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.bc-kda-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bc-kda-item .kda-ign {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.bc-kda-inputs {
+  display: flex;
+  gap: 2px;
+}
+
+.bc-kda-inputs input {
+  width: 40px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 0.3rem 0.25rem;
+  text-align: center;
+  outline: none;
+}
+
+.bc-kda-inputs input:focus {
+  border-color: var(--accent);
+}
+
+.bc-kda-sep {
+  color: var(--text-muted);
+  line-height: 1.8;
+  font-size: 0.82rem;
+}
+
+.bc-save-bar {
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.bc-save-msg {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--green);
+}
+
+/* ===== Tournament Overview ===== */
+.bc-overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .bc-overview-grid { grid-template-columns: 1fr; }
+}
+
+.bc-standings-table,
+.bc-leaderboard-table,
+.bc-meta-snap-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bc-standings-table th,
+.bc-leaderboard-table th,
+.bc-meta-snap-table th {
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.bc-standings-table td,
+.bc-leaderboard-table td,
+.bc-meta-snap-table td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  vertical-align: middle;
+}
+
+.bc-standings-table tr:last-child td,
+.bc-leaderboard-table tr:last-child td,
+.bc-meta-snap-table tr:last-child td {
+  border-bottom: none;
+}
+
+.bc-standings-table tr:hover td,
+.bc-leaderboard-table tr:hover td,
+.bc-meta-snap-table tr:hover td {
+  background: var(--surface-hover);
+}
+
+.bc-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.7rem;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.bc-rank-badge.rank-1 { background: var(--gold); color: var(--bg-deep); }
+.bc-rank-badge.rank-2 { background: #94a3b8; color: var(--bg-deep); }
+.bc-rank-badge.rank-3 { background: #cd7c45; color: var(--bg-deep); }
+
+/* Sortable headers */
+.bc-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.bc-sortable:hover {
+  color: var(--accent);
+}
+
+/* ===== Loading / Empty states ===== */
+.bc-loading {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 1.5rem 0;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.bc-empty {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+/* OBS export button area */
+.bc-obs-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.bc-obs-url {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

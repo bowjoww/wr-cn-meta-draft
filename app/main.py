@@ -193,6 +193,14 @@ def index() -> FileResponse:
     return FileResponse(STATIC_INDEX_PATH)
 
 
+@app.get("/broadcaster/overlay")
+def broadcaster_overlay() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "broadcaster_overlay.html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}

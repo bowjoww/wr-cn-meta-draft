@@ -4,15 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ScrimVault</title>
-    <link rel="icon" type="image/x-icon" href="/static/branding/favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/branding/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/static/branding/favicon-16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/static/branding/apple-touch-icon.png" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/branding/favicon-32.png?v=2" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/branding/favicon-16.png?v=2" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/branding/apple-touch-icon.png?v=2" />
     <link rel="manifest" href="/static/site.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/scrim.css">
+    <link rel="stylesheet" href="/static/broadcaster.css">
     <style>
       /* ===== META VIEWER INLINE STYLES ===== */
       .source-banner {
@@ -214,6 +215,7 @@
         <nav class="top-nav">
           <button id="navMeta" class="active" onclick="switchSection('meta')">Meta Viewer</button>
           <button id="navScrim" onclick="switchSection('scrim')">Scrim Tracker</button>
+          <button id="navBroadcaster" onclick="switchSection('broadcaster')">Broadcaster</button>
         </nav>
       </header>
 
@@ -530,6 +532,15 @@
           </script>
         </section>
 
+        <section id="broadcasterSection" style="display:none">
+          <div class="section-header">
+            <h1>Broadcaster</h1>
+            <span class="section-tag">CASTER COMMAND CENTER</span>
+          </div>
+          <div class="bc-tabs" id="bcSubTabs"></div>
+          <div id="bcContent"></div>
+        </section>
+
         <section id="scrimSection" style="display:none">
           <div class="section-header">
             <h1>Scrim Tracker</h1>
@@ -542,24 +553,39 @@
     </div>
 
     <script src="/static/scrim.js"></script>
+    <script src="/static/broadcaster.js"></script>
     <script>
+      let bcInitialized = false;
+
       function switchSection(section) {
         const metaEl = document.getElementById('metaSection');
         const scrimEl = document.getElementById('scrimSection');
+        const bcEl = document.getElementById('broadcasterSection');
         const navMeta = document.getElementById('navMeta');
         const navScrim = document.getElementById('navScrim');
+        const navBc = document.getElementById('navBroadcaster');
+
+        metaEl.style.display = 'none';
+        scrimEl.style.display = 'none';
+        bcEl.style.display = 'none';
+        navMeta.classList.remove('active');
+        navScrim.classList.remove('active');
+        navBc.classList.remove('active');
 
         if (section === 'meta') {
           metaEl.style.display = '';
-          scrimEl.style.display = 'none';
           navMeta.classList.add('active');
-          navScrim.classList.remove('active');
-        } else {
-          metaEl.style.display = 'none';
+        } else if (section === 'scrim') {
           scrimEl.style.display = '';
-          navMeta.classList.remove('active');
           navScrim.classList.add('active');
           window.initScrim();
+        } else if (section === 'broadcaster') {
+          bcEl.style.display = '';
+          navBc.classList.add('active');
+          if (!bcInitialized) {
+            bcInitialized = true;
+            window.initBroadcaster();
+          }
         }
       }
     </script>

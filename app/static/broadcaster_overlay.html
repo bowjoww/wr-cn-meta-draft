@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScrimVault — Draft Overlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #0b0e14;
+      --surface: #161b25;
+      --surface-hover: #1c2230;
+      --border: #252d3a;
+      --border-strong: #334155;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #22d3ee;
+      --accent-glow: rgba(34, 211, 238, 0.2);
+      --blue-team: #3b82f6;
+      --red-team: #ef4444;
+      --red-dim: rgba(239, 68, 68, 0.12);
+      --font-heading: "Chakra Petch", sans-serif;
+      --font-mono: "JetBrains Mono", monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* OBS: 1920x1080 chromeless */
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: var(--font-heading);
+      color: var(--text-primary);
+    }
+
+    /* Full-width draft bar — pinned to bottom */
+    .overlay-root {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 180px;
+      background: rgba(11, 14, 20, 0.92);
+      border-top: 2px solid var(--border-strong);
+      display: flex;
+      align-items: stretch;
+      padding: 0 16px;
+      gap: 12px;
+    }
+
+    /* Team panel */
+    .ov-team {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 240px;
+    }
+
+    .ov-team-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ov-team.blue .ov-team-name { color: var(--blue-team); }
+    .ov-team.red  .ov-team-name { color: var(--red-team); }
+
+    .ov-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    /* Slots row */
+    .ov-slots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .ov-slot {
+      width: 52px;
+      height: 60px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.58rem;
+      color: var(--text-muted);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ov-slot img {
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+
+    .ov-slot .slot-name {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(11,14,20,0.75);
+      font-size: 0.5rem;
+      text-align: center;
+      padding: 1px 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+
+    .ov-slot.ban-slot {
+      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.06);
+    }
+
+    .ov-slot.ban-slot img {
+      opacity: 0.55;
+      filter: grayscale(60%);
+    }
+
+    .ov-slot.active-slot {
+      border-color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    /* Center divider */
+    .ov-center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .ov-center .vs-badge {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .ov-center .step-label {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    /* Separator */
+    .ov-sep {
+      width: 1px;
+      align-self: stretch;
+      background: var(--border);
+      margin: 12px 0;
+    }
+
+    #overlayStatus {
+      position: fixed;
+      top: 10px;
+      right: 16px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlayStatus">Connecting…</div>
+  <div class="overlay-root" id="overlayRoot">
+    <!-- Rendered by JS -->
+    <div style="color:var(--text-muted);font-size:0.82rem;align-self:center;padding-left:1rem">
+      Waiting for draft data…
+    </div>
+  </div>
+
+  <script>
+    const POLL_MS = 2000;
+    let lastStep = -1;
+    let champCache = {};
+
+    async function loadChampions() {
+      try {
+        const res = await fetch("/api/champions");
+        if (res.ok) {
+          const list = await res.json();
+          for (const c of list) {
+            champCache[c.name.toLowerCase()] = c;
+            if (c.name_cn) champCache[c.name_cn.toLowerCase()] = c;
+          }
+        }
+      } catch {}
+    }
+
+    function esc(s) {
+      if (!s) return "";
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    function slotImg(champName) {
+      if (!champName) return "";
+      const c = champCache[champName.toLowerCase()];
+      if (c && c.avatar_url) {
+        return `<img src="${esc(c.avatar_url)}" alt="${esc(champName)}" onerror="this.style.display='none'">`;
+      }
+      return `<span style="font-size:1.2rem;font-weight:700;color:var(--accent)">${champName[0]}</span>`;
+    }
+
+    function renderOverlay(state) {
+      const root = document.getElementById("overlayRoot");
+      if (!state) { root.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;align-self:center;padding-left:1rem">Waiting for draft data…</div>'; return; }
+
+      const teamA = state.teamA || "Blue Side";
+      const teamB = state.teamB || "Red Side";
+      const blue = state.blue || { bans: [], picks: [] };
+      const red  = state.red  || { bans: [], picks: [] };
+      const step = state.step || 0;
+
+      const DRAFT_ORDER = [
+        {team:"blue",type:"ban"},{team:"red",type:"ban"},{team:"blue",type:"ban"},{team:"red",type:"ban"},
+        {team:"blue",type:"pick"},{team:"red",type:"pick"},{team:"red",type:"pick"},{team:"blue",type:"pick"},{team:"blue",type:"pick"},{team:"red",type:"pick"},
+        {team:"red",type:"ban"},{team:"blue",type:"ban"},{team:"red",type:"ban"},{team:"blue",type:"ban"},
+        {team:"red",type:"pick"},{team:"red",type:"pick"},{team:"blue",type:"pick"},{team:"blue",type:"pick"},{team:"red",type:"pick"},
+      ];
+
+      function slotsHtml(team, type, arr, maxSlots) {
+        const slots = (arr || []).slice(0, maxSlots);
+        while (slots.length < maxSlots) slots.push(null);
+        return slots.map((champ, i) => {
+          const isBan = type === "ban";
+          const nextStep = DRAFT_ORDER[step];
+          const isActive = nextStep && nextStep.team === team && nextStep.type === type &&
+            (isBan ? blue.bans.filter(Boolean).length === i || red.bans.filter(Boolean).length === i : false);
+          return `<div class="ov-slot${isBan ? " ban-slot" : ""}${isActive ? " active-slot" : ""}">
+            ${champ ? slotImg(champ) : ""}
+            ${champ ? `<span class="slot-name">${esc(champ)}</span>` : ""}
+          </div>`;
+        }).join("");
+      }
+
+      const curStep = DRAFT_ORDER[step];
+      const stepLabel = step >= DRAFT_ORDER.length
+        ? "Draft Complete"
+        : `${curStep.team === "blue" ? teamA : teamB} — ${curStep.type === "ban" ? "Banning" : "Picking"}`;
+
+      root.innerHTML = `
+        <div class="ov-team blue">
+          <div class="ov-team-name">${esc(teamA)}</div>
+          <div class="ov-label">Bans</div>
+          <div class="ov-slots">${slotsHtml("blue","ban", blue.bans, 4)}</div>
+          <div class="ov-label" style="margin-top:8px">Picks</div>
+          <div class="ov-slots">${slotsHtml("blue","pick", blue.picks, 5)}</div>
+        </div>
+        <div class="ov-sep"></div>
+        <div class="ov-center">
+          <div class="vs-badge">VS</div>
+          <div class="step-label">${esc(stepLabel)}</div>
+        </div>
+        <div class="ov-sep"></div>
+        <div class="ov-team red">
+          <div class="ov-team-name">${esc(teamB)}</div>
+          <div class="ov-label">Bans</div>
+          <div class="ov-slots">${slotsHtml("red","ban", red.bans, 4)}</div>
+          <div class="ov-label" style="margin-top:8px">Picks</div>
+          <div class="ov-slots">${slotsHtml("red","pick", red.picks, 5)}</div>
+        </div>
+      `;
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("/api/broadcaster/draft/state");
+        const statusEl = document.getElementById("overlayStatus");
+        if (res.ok) {
+          const state = await res.json();
+          statusEl.textContent = "Live";
+          statusEl.style.color = "#4ade80";
+          if (state.step !== lastStep) {
+            lastStep = state.step;
+            renderOverlay(state);
+          }
+        } else if (res.status === 404) {
+          // endpoint not deployed yet — show placeholder
+          statusEl.textContent = "Waiting for backend";
+        } else {
+          statusEl.textContent = "Error";
+          statusEl.style.color = "#f87171";
+        }
+      } catch {
+        document.getElementById("overlayStatus").textContent = "Offline";
+      }
+      setTimeout(poll, POLL_MS);
+    }
+
+    loadChampions().then(poll);
+  </script>
+</body>
+</html>
