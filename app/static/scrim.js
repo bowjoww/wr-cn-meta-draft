@@ -10,6 +10,71 @@
   let showAllMatches = false;
   const MATCH_HISTORY_LIMIT = 15;
 
+  // ---- PIN Auth ----
+  let scrimPin = sessionStorage.getItem("scrimPin") || "";
+
+  function scrimHeaders(extra) {
+    return Object.assign({ "X-Scrim-Pin": scrimPin }, extra || {});
+  }
+
+  async function ensurePin() {
+    if (scrimPin) {
+      // Validate stored PIN is still accepted
+      const test = await fetch("/api/scrims/filters", { headers: scrimHeaders() });
+      if (test.ok) return true;
+      // Stored PIN rejected — clear and re-prompt
+      scrimPin = "";
+      sessionStorage.removeItem("scrimPin");
+    }
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center";
+      overlay.innerHTML = `
+        <div style="background:#1e2633;border-radius:10px;padding:2rem 2.5rem;min-width:300px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+          <div style="font-size:1.5rem;font-weight:700;color:#e2e8f0;margin-bottom:0.5rem">Scrim Tracker</div>
+          <div style="color:#94a3b8;margin-bottom:1.5rem;font-size:0.9rem">Acesso restrito. Digite o PIN para continuar.</div>
+          <input id="scrimPinInput" type="password" placeholder="PIN" autocomplete="off"
+            style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:1.1rem;text-align:center;margin-bottom:0.5rem;box-sizing:border-box">
+          <div id="scrimPinError" style="color:#f87171;font-size:0.82rem;min-height:1.2em;margin-bottom:0.75rem"></div>
+          <button id="scrimPinBtn" style="width:100%;padding:0.6rem;background:#2d6cdf;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:600">Entrar</button>
+        </div>`;
+      document.body.appendChild(overlay);
+      const input = overlay.querySelector("#scrimPinInput");
+      const btn = overlay.querySelector("#scrimPinBtn");
+      const err = overlay.querySelector("#scrimPinError");
+      input.focus();
+
+      async function tryPin() {
+        const val = input.value.trim();
+        if (!val) return;
+        btn.disabled = true;
+        btn.textContent = "Verificando...";
+        try {
+          const res = await fetch("/api/scrims/filters", { headers: { "X-Scrim-Pin": val } });
+          if (res.ok) {
+            scrimPin = val;
+            sessionStorage.setItem("scrimPin", val);
+            document.body.removeChild(overlay);
+            resolve(true);
+          } else {
+            err.textContent = "PIN incorreto. Tente novamente.";
+            input.value = "";
+            input.focus();
+            btn.disabled = false;
+            btn.textContent = "Entrar";
+          }
+        } catch (e) {
+          err.textContent = "Erro de conexão. Tente novamente.";
+          btn.disabled = false;
+          btn.textContent = "Entrar";
+        }
+      }
+
+      btn.addEventListener("click", tryPin);
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") tryPin(); });
+    });
+  }
+
   // ---- Open Series Teams ----
   // Open Series BR - Fase de Grupos
   const OPEN_SERIES_TEAMS = [
@@ -32,7 +97,12 @@
   ].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   // ---- Init ----
+  let scrimInitialized = false;
   async function initScrim() {
+    const ok = await ensurePin();
+    if (!ok) return;
+    if (scrimInitialized) return;
+    scrimInitialized = true;
     await loadChampions();
     renderSubTabs();
     renderInputTab();
@@ -44,7 +114,7 @@
 
   async function loadChampions() {
     try {
-      const res = await fetch("/api/champions");
+      const res = await fetch("/api/champions", { headers: scrimHeaders() });
       if (res.ok) {
         champions = await res.json();
         champByName = {};
@@ -334,7 +404,7 @@
     // Auto-fill patch with last used value
     const patchField = document.getElementById("fPatch");
     if (!patchField.value) {
-      fetch("/api/scrims/filters").then(r => r.json()).then(f => {
+      fetch("/api/scrims/filters", { headers: scrimHeaders() }).then(r => r.json()).then(f => {
         if (f.patches?.length && !patchField.value) {
           patchField.value = f.patches[0];
         }
@@ -560,7 +630,7 @@
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: scrimHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data),
       });
       if (!res.ok) {
@@ -656,7 +726,7 @@
     if (!body) return;
 
     try {
-      const res = await fetch("/api/scrims/matches");
+      const res = await fetch("/api/scrims/matches", { headers: scrimHeaders() });
       if (!res.ok) return;
       const matches = await res.json();
 
@@ -692,7 +762,7 @@
   window._scrimDeleteMatch = async function (id) {
     if (!confirm("Excluir esta partida?")) return;
     try {
-      await fetch(`/api/scrims/matches/${id}`, { method: "DELETE" });
+      await fetch(`/api/scrims/matches/${id}`, { method: "DELETE", headers: scrimHeaders() });
       if (editingMatchId === id) {
         editingMatchId = null;
         updateSaveButton();
@@ -705,7 +775,7 @@
 
   window._scrimEditMatch = async function (id) {
     try {
-      const res = await fetch(`/api/scrims/matches/${id}`);
+      const res = await fetch(`/api/scrims/matches/${id}`, { headers: scrimHeaders() });
       if (!res.ok) { alert("Erro ao carregar partida"); return; }
       const m = await res.json();
 
@@ -819,6 +889,7 @@
     try {
       const res = await fetch("/api/scrims/ocr", {
         method: "POST",
+        headers: scrimHeaders(),
         body: formData,
       });
 
@@ -932,7 +1003,7 @@
 
   async function populateFilters(prefix) {
     try {
-      const res = await fetch("/api/scrims/filters");
+      const res = await fetch("/api/scrims/filters", { headers: scrimHeaders() });
       if (!res.ok) return;
       const f = await res.json();
       const oppSel = document.getElementById(`${prefix}Opponent`);
@@ -968,14 +1039,14 @@
     const body = document.getElementById("statsBody");
     try {
       const [statsRes, roleAvgRes, allChampsRes, generalRes, mvpSvpRes, enemyChampsRes, enemyGeneralRes, openSeriesRes] = await Promise.all([
-        fetch("/api/scrims/stats?" + params.toString()),
-        fetch("/api/scrims/role-averages?" + params.toString()),
-        fetch("/api/scrims/all-champions-by-role?" + params.toString()),
-        fetch("/api/scrims/all-champions-general?" + params.toString()),
-        fetch("/api/scrims/mvp-svp?" + params.toString()),
-        fetch("/api/scrims/enemy-champions-by-role?" + params.toString()),
-        fetch("/api/scrims/enemy-champions-general?" + params.toString()),
-        fetch("/api/openseries/champions"),
+        fetch("/api/scrims/stats?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/scrims/role-averages?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/scrims/all-champions-by-role?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/scrims/all-champions-general?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/scrims/mvp-svp?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/scrims/enemy-champions-by-role?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/scrims/enemy-champions-general?" + params.toString(), { headers: scrimHeaders() }),
+        fetch("/api/openseries/champions", { headers: scrimHeaders() }),
       ]);
       if (!statsRes.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar stats</p>'; return; }
       const data = await statsRes.json();
@@ -1303,7 +1374,7 @@
     const params = buildFilterParams("cf");
     const body = document.getElementById("champsBody");
     try {
-      const res = await fetch("/api/scrims/champion-stats?" + params.toString());
+      const res = await fetch("/api/scrims/champion-stats?" + params.toString(), { headers: scrimHeaders() });
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro ao carregar champion stats</p>'; return; }
       const data = await res.json();
       renderChampionTable(data, body);
@@ -1439,7 +1510,7 @@
     const params = buildFilterParams("mf");
     const body = document.getElementById("matchupsBody");
     try {
-      const res = await fetch("/api/scrims/matchups?" + params.toString());
+      const res = await fetch("/api/scrims/matchups?" + params.toString(), { headers: scrimHeaders() });
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
       matchupData = await res.json();
       if (!matchupData.length) { body.innerHTML = '<p style="color:#999">Sem dados de matchup.</p>'; return; }
@@ -1495,7 +1566,7 @@
     const params = buildFilterParams("df");
     const body = document.getElementById("duosBody");
     try {
-      const res = await fetch("/api/scrims/duos?" + params.toString());
+      const res = await fetch("/api/scrims/duos?" + params.toString(), { headers: scrimHeaders() });
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
       duoData = await res.json();
       if (!duoData.length) { body.innerHTML = '<p style="color:#999">Sem dados de duos.</p>'; return; }
@@ -1551,7 +1622,7 @@
     const params = buildFilterParams("pf");
     const body = document.getElementById("pickBody");
     try {
-      const res = await fetch("/api/scrims/pick-priority?" + params.toString());
+      const res = await fetch("/api/scrims/pick-priority?" + params.toString(), { headers: scrimHeaders() });
       if (!res.ok) { body.innerHTML = '<p style="color:#c00">Erro</p>'; return; }
       pickData = await res.json();
       if (!pickData.length) { body.innerHTML = '<p style="color:#999">Sem dados de pick order.</p>'; return; }

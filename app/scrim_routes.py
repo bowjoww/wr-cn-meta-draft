@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, UploadFile, File
 from pydantic import BaseModel, field_validator
 
 from app.scrim_db import (
@@ -37,6 +38,13 @@ from app.fetch_cn_meta import DISPLAY_NAME_OVERRIDES, HERO_MAP_CACHE_PATH, fetch
 
 logger = logging.getLogger(__name__)
 
+SCRIM_PIN = os.environ.get("SCRIM_PIN", "")
+
+
+def _check_pin(x_scrim_pin: str | None = Header(default=None)) -> None:
+    if not SCRIM_PIN or x_scrim_pin != SCRIM_PIN:
+        raise HTTPException(status_code=401, detail="Invalid or missing scrim PIN")
+
 
 def _normalize_champion_name(name: str) -> str:
     """Normalize champion names (e.g. MonkeyKing -> Wukong)."""
@@ -53,7 +61,7 @@ def _normalize_match_data(data: dict) -> dict:
             b["champion"] = _normalize_champion_name(b["champion"])
     return data
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(_check_pin)])
 
 VALID_ROLES = {"top", "jungle", "mid", "bot", "support"}
 VALID_SIDES = {"blue", "red"}
