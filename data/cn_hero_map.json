@@ -1089,6 +1089,14 @@
       "avatar_url": "https://game.gtimg.cn/images/lgamem/act/lrlib/img/HeadIcon/H_S_10166.png",
       "card_url": "https://game.gtimg.cn/images/lgamem/act/lrlib/img/CardPictures/S_R_1016601.png",
       "poster_url": "https://game.gtimg.cn/images/lgamem/act/lrlib/img/Posters/Norra_0.jpg"
+    },
+    "10167": {
+      "hero_name_cn": "克烈",
+      "hero_name_global": "KSante",
+      "lane": "单人路",
+      "avatar_url": "https://game.gtimg.cn/images/lgamem/act/lrlib/img/HeadIcon/H_S_10167.png",
+      "card_url": "https://game.gtimg.cn/images/lgamem/act/lrlib/img/CardPictures/S_R_1016701.png",
+      "poster_url": "https://game.gtimg.cn/images/lgamem/act/lrlib/img/Posters/KSante_0.jpg"
     }
   }
 }

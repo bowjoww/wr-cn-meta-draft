@@ -288,17 +288,23 @@ def fetch_hero_map_from_gtimg(force_refresh: bool = False) -> dict[str, dict[str
         if cache_payload and _cache_age_from_fetched_at(cache_payload.get("fetched_at")) <= HERO_MAP_CACHE_TTL_SECONDS:
             return (cache_payload.get("items") or {})
 
-    js_text = _request_with_rate_limit(HERO_MAP_URL).text
-    hero_map = _extract_hero_map(js_text)
-    payload = {
-        "fetched_at": _iso_now(),
-        "source_url": HERO_MAP_URL,
-        "items": hero_map,
-    }
-    HERO_MAP_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with HERO_MAP_CACHE_PATH.open("w", encoding="utf-8") as file:
-        json.dump(payload, file, ensure_ascii=False, indent=2)
-    return hero_map
+    try:
+        js_text = _request_with_rate_limit(HERO_MAP_URL).text
+        hero_map = _extract_hero_map(js_text)
+        payload = {
+            "fetched_at": _iso_now(),
+            "source_url": HERO_MAP_URL,
+            "items": hero_map,
+        }
+        HERO_MAP_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with HERO_MAP_CACHE_PATH.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=2)
+        return hero_map
+    except Exception:
+        stale = _read_json_cache(HERO_MAP_CACHE_PATH)
+        if stale and stale.get("items"):
+            return stale["items"]
+        raise
 
 
 def hero_map_cache_age_seconds() -> int | None:

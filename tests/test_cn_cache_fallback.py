@@ -16,7 +16,7 @@ def test_meta_auto_uses_stale_cn_cache_when_live_fetch_fails(monkeypatch):
         {
             "champion": "hero_10138",
             "role": "top",
-            "tier": "diamond",
+            "tier": "diamond_plus",
             "winrate": 0.55,
             "pickrate": 0.12,
             "banrate": 0.33,
@@ -27,7 +27,7 @@ def test_meta_auto_uses_stale_cn_cache_when_live_fetch_fails(monkeypatch):
     monkeypatch.setattr("app.main.get_cached_meta", lambda role, tier: None)
     monkeypatch.setattr("app.main.get_stale_cached_meta", lambda role, tier: stale_items)
 
-    response = client.get("/meta", params={"role": "top", "tier": "diamond", "source": "auto"})
+    response = client.get("/meta", params={"role": "top", "tier": "diamond_plus", "source": "auto"})
 
     assert response.status_code == 200
     payload = response.json()

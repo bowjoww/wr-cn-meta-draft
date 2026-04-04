@@ -42,7 +42,7 @@ SCRIM_PIN = os.environ.get("SCRIM_PIN", "")
 
 
 def _check_pin(x_scrim_pin: str | None = Header(default=None)) -> None:
-    if not SCRIM_PIN or x_scrim_pin != SCRIM_PIN:
+    if SCRIM_PIN and x_scrim_pin != SCRIM_PIN:
         raise HTTPException(status_code=401, detail="Invalid or missing scrim PIN")
 
 
