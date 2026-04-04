@@ -19,6 +19,7 @@ from app.fetch_cn_meta import (
     fetch_cn_payload,
     fetch_hero_map_from_gtimg,
     get_cached_meta,
+    get_stale_cached_meta,
     hero_map_cache_age_seconds,
     is_cache_fresh,
     read_cache,
@@ -276,7 +277,15 @@ def meta(
                 "last_fetch": _cached_cn_last_fetch(),
             }
     except Exception as exc:
-        logger.warning("CN source failed in auto mode, falling back to sample: %s", exc)
+        logger.warning("CN source failed in auto mode, trying stale cache: %s", exc)
+        stale_rows = get_stale_cached_meta(role=role, tier=tier)
+        if stale_rows:
+            rows = _filter_and_score(stale_rows, role=role, tier=tier, sort=sort_field, direction=dir)
+            return {
+                "items": _with_champion_lang(rows, name_lang=name_lang),
+                "source": "cn_stale_cache",
+                "last_fetch": _cached_cn_last_fetch(),
+            }
         warning = f"Dados CN indisponíveis ({exc}). Usando dados sample como fallback."
 
     rows = _filter_and_score(_load_meta_data(), role=role, tier=tier, sort=sort_field, direction=dir)
@@ -303,7 +312,7 @@ def meta_source() -> dict[str, str | int | bool | None]:
         }
 
     age = cache_age_seconds(cache_payload)
-    source_label = "cn_cache" if is_cache_fresh(cache_payload) else "sample"
+    source_label = "cn_cache" if is_cache_fresh(cache_payload) else "cn_stale_cache"
     return {
         "source": source_label,
         "cache_age_seconds": age,

@@ -606,6 +606,25 @@ def get_cached_meta(role: str, tier: str) -> list[dict[str, Any]] | None:
     return rows or None
 
 
+def get_stale_cached_meta(role: str, tier: str) -> list[dict[str, Any]] | None:
+    """Return cached meta even if stale (beyond TTL), for fallback use."""
+    cache_payload = read_cache()
+    if not cache_payload:
+        return None
+
+    raw_payload = (cache_payload.get("raw_payload_by_tier") or {}).get(tier)
+    if raw_payload:
+        hero_map = fetch_hero_map_from_gtimg()
+        try:
+            return build_cn_rows_from_payload(payload=raw_payload, role=role, tier=tier, hero_map=hero_map)
+        except RuntimeError:
+            return None
+
+    key = f"{role}:{tier}"
+    rows = (cache_payload.get("items") or {}).get(key)
+    return rows or None
+
+
 def get_cached_raw_payload(tier: str) -> dict[str, Any] | None:
     cache_payload = read_cache()
     if not cache_payload or not is_cache_fresh(cache_payload):
